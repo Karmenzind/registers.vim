@@ -84,10 +84,14 @@ function! registers#OpenWindow()
   call s:ReadRegisters()
 
   let s:buf = nvim_create_buf(v:false, v:true)
+  echom "Buff" .. s:buf
 
-  call nvim_buf_set_option(s:buf, "bufhidden", "wipe")
-  call nvim_buf_set_option(s:buf, "filetype", "registers")
-	call nvim_buf_set_option(s:buf, "omnifunc", "")
+  call setbufvar(s:buf, "&bufhidden", "wipe")
+  call setbufvar(s:buf, "&filetype", "registers")
+  call setbufvar(s:buf, "&omnifunc", "")
+  " call nvim_buf_set_option(s:buf, "bufhidden", "wipe")
+  " call nvim_buf_set_option(s:buf, "filetype", "registers")
+	" call nvim_buf_set_option(s:buf, "omnifunc", "")
 
 	let l:width = &columns
 	let l:height = &lines
@@ -132,11 +136,14 @@ function! registers#OpenWindow()
 	autocmd! CursorMoved <buffer> call cursor(0, 1)
 	augroup END
 
-	call nvim_win_set_option(s:win, "cursorline", v:true)
-	call nvim_win_set_option(s:win, "number", v:false)
-	call nvim_win_set_option(s:win, "relativenumber", v:false)
+  call setbufvar(s:buf, "&number", 0)
+  call setbufvar(s:buf, "&cursorline", 1)
+  call setbufvar(s:buf, "&relativenumber", 0)
+	" call nvim_win_set_option(s:win, "cursorline", v:true)
+	" call nvim_win_set_option(s:win, "number", v:false)
+	" call nvim_win_set_option(s:win, "relativenumber", v:false)
 
-  " XXX (k): <2021-07-27> 
+  " XXX (k): <2021-07-27>
   if s:invocation_mode == "i"
     call feedkeys("\<C-[>", "n")
   endif
@@ -147,7 +154,11 @@ function! registers#CloseWindow()
     return
   endif
 
-  call nvim_win_close(s:win, v:true)
+  execute "q"
+
+  " call nvim_win_close(s:win, v:true)
+  " XXX (k): <2021-07-30> didn't work. why?
+  " execute s:win.'wincmd c'
   let s:win = v:null
 endfunction
 
