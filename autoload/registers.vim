@@ -27,10 +27,59 @@ let s:buf = v:null
 let s:win = v:null
 let s:invocation_mode = v:null
 let s:operator_count = 0
+let s:mappings = {}
 
+
+let s:movement_keymaps = {
+      \ "\<ESC>": 'ESC',
+      \ "\<CR>": 'ENTER',
+      \ "\<UP>": 'UP',
+      \ "\<DOWN>": 'DOWN',
+      \ "\<c-j>": 'DOWN',
+      \ "\<c-k>": 'UP',
+      \ "\<c-n>": 'NEXT',
+      \ "\<c-p>": 'PREV',
+      \ "\<c-b>": 'PAGEUP',
+      \ "\<c-f>": 'PAGEDOWN',
+      \ "\<c-u>": 'HALFUP',
+      \ "\<c-d>": 'HALFDOWN',
+      \ "\<PageUp>": 'PAGEUP',
+      \ "\<PageDown>": 'PAGEDOWN',
+      \ "G": 'BOTTOM',
+      \ }
 " --------------------------------------------
 " funcs
 " --------------------------------------------
+
+function! registers#CursorMovement(where)
+	let curline = line('.')
+	let endline = line('$')
+	let height = winheight('.')
+	if a:where == 'TOP'
+		let curline = 0
+	elseif a:where == 'BOTTOM'
+		let curline = line('$')
+	elseif a:where == 'UP'
+		let curline = curline - 1
+	elseif a:where == 'DOWN'
+		let curline = curline + 1
+	elseif a:where == 'PAGEUP'
+		let curline = curline - height
+	elseif a:where == 'PAGEDOWN'
+		let curline = curline + height
+	elseif a:where == 'HALFUP'
+		let curline = curline - height / 2
+	elseif a:where == 'HALFDOWN'
+		let curline = curline + height / 2
+	endif
+	if curline < 1
+		let curline = 1
+	elseif curline > endline
+		let curline = endline
+	endif
+	noautocmd exec ":" . curline
+	noautocmd exec "normal! 0"
+endfunc
 
 function! s:ResetCursor()
   call cursor(0, 1)
@@ -83,15 +132,14 @@ endfunction
 function! registers#OpenWindow()
   call s:ReadRegisters()
 
-  let s:buf = nvim_create_buf(v:false, v:true)
-  echom "Buff" .. s:buf
+  " let s:buf = nvim_create_buf(v:false, v:true)
+  let s:buf = bufadd("")
+  silent call bufload(s:buf)
+  echom "Opened register in buffer " .. s:buf
 
   call setbufvar(s:buf, "&bufhidden", "wipe")
   call setbufvar(s:buf, "&filetype", "registers")
   call setbufvar(s:buf, "&omnifunc", "")
-  " call nvim_buf_set_option(s:buf, "bufhidden", "wipe")
-  " call nvim_buf_set_option(s:buf, "filetype", "registers")
-	" call nvim_buf_set_option(s:buf, "omnifunc", "")
 
 	let l:width = &columns
 	let l:height = &lines
@@ -128,25 +176,49 @@ function! registers#OpenWindow()
         \ "col":  0
         \}
 
-  let s:win = nvim_open_win(s:buf, v:true, l:opts)
-	let s:max_width = nvim_win_get_width(s:win) - 2
+  if has('nvim')
+    let s:win = nvim_open_win(s:buf, v:true, l:opts)
+  else
+    let l:popup_opts = {
+          \ 'wrap':0, 
+          \ 'mapping':0, 
+          \ 'zindex': 100,
+          \ 'moved': 'any',
+          \ 'hidden':0, 
+          \ 'cursorline':1, 
+          \ 'cursorcolumn':1, 
+          \ 'line': 'cursor+1', 'col': 'cursor+1',
+          \ 'maxwidth': l:win_width, 'maxheight': l:win_height,
+          \ 'close': 'none',
+          \ 'scrollbar': 1,
+          \ 'border': [1,1,1,1],
+          \ 'borderchars': ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
+          \ }
+    let s:win = popup_create(s:buf, l:popup_opts)
+    echom "Using win " .. s:win
+    " call popup_show(s:win)
+  endif
+  
+	let s:max_width = l:win_width
 
-	augroup registers_specifics
-	autocmd! BufLeave <buffer> call registers#CloseWindow()
-	autocmd! CursorMoved <buffer> call cursor(0, 1)
-	augroup END
+  if has('nvim')
+    augroup registers_specifics
+    autocmd! BufLeave <buffer> call registers#CloseWindow()
+    autocmd! CursorMoved <buffer> call cursor(0, 1)
+    augroup END
+  endif
 
   call setbufvar(s:buf, "&number", 0)
   call setbufvar(s:buf, "&cursorline", 1)
   call setbufvar(s:buf, "&relativenumber", 0)
-	" call nvim_win_set_option(s:win, "cursorline", v:true)
-	" call nvim_win_set_option(s:win, "number", v:false)
-	" call nvim_win_set_option(s:win, "relativenumber", v:false)
 
   " XXX (k): <2021-07-27>
-  if s:invocation_mode == "i"
+  if has('nvim') && s:invocation_mode == "i"
     call feedkeys("\<C-[>", "n")
   endif
+
+  hi PopupRegisters ctermbg=NONE guibg=NONE
+  call setwinvar(s:win, '&wincolor', 'PopupRegisters')
 endfunction
 
 function! registers#CloseWindow()
@@ -154,9 +226,13 @@ function! registers#CloseWindow()
     return
   endif
 
-  execute "q"
+  if has("nvim")
+    call nvim_win_close(s:win, v:true)
+  else
+    call popup_close(s:win)
+  endif
 
-  " call nvim_win_close(s:win, v:true)
+  " execute "q!"
   " XXX (k): <2021-07-30> didn't work. why?
   " execute s:win.'wincmd c'
   let s:win = v:null
@@ -164,7 +240,7 @@ endfunction
 
 function! registers#SetMappings()
   " FIXME (k): <2021-07-27> [] ?
-  let l:mappings = {
+  let s:mappings = {
         \ "<CR>": "ApplyRegister(v:null)",
 		    \ "<ESC>": "CloseWindow()",
         \ }
@@ -176,7 +252,7 @@ function! registers#SetMappings()
       else
         let l:arg = l:reg
       endif
-      let l:mappings[l:reg] = printf("ApplyRegister(\"%s\")", l:arg)
+      let s:mappings[l:reg] = printf("ApplyRegister(\"%s\")", l:arg)
     endfor
   endfor
 
@@ -186,26 +262,51 @@ function! registers#SetMappings()
 		    \ "silent": v:true,
         \ }
 
-  for [key, func] in items(l:mappings)
-		" let l:callback = ("<cmd>lua require\"registers\".%s<cr>"):format(func)
-		let l:callback = printf(":call registers#%s<cr>", func)
-		" Map to both normal mode and insert mode for <C-R>
-		call nvim_buf_set_keymap(s:buf, "n", key, l:callback, l:map_options)
-		call nvim_buf_set_keymap(s:buf, "i", key, l:callback, l:map_options)
-		call nvim_buf_set_keymap(s:buf, "v", key, l:callback, l:map_options)
-  endfor
+  if has('nvim')
+    for [key, func] in items(s:mappings)
+      " let l:callback = ("<cmd>lua require\"registers\".%s<cr>"):format(func)
+      let l:callback = printf(":call registers#%s<cr>", func)
+      " Map to both normal mode and insert mode for <C-R>
+      call nvim_buf_set_keymap(s:buf, "n", key, l:callback, l:map_options)
+      call nvim_buf_set_keymap(s:buf, "i", key, l:callback, l:map_options)
+      call nvim_buf_set_keymap(s:buf, "v", key, l:callback, l:map_options)
+    endfor
 
-	" Map <c-k> & <c-j> for moving up and down
-	call nvim_buf_set_keymap(s:buf, "n", "<c-k>", "<up>", l:map_options)
-	call nvim_buf_set_keymap(s:buf, "i", "<c-k>", "<up>", l:map_options)
-	call nvim_buf_set_keymap(s:buf, "n", "<c-j>", "<down>", l:map_options)
-	call nvim_buf_set_keymap(s:buf, "i", "<c-j>", "<down>", l:map_options)
+    " Map <c-k> & <c-j> for moving up and down
+    call nvim_buf_set_keymap(s:buf, "n", "<c-k>", "<up>", l:map_options)
+    call nvim_buf_set_keymap(s:buf, "i", "<c-k>", "<up>", l:map_options)
+    call nvim_buf_set_keymap(s:buf, "n", "<c-j>", "<down>", l:map_options)
+    call nvim_buf_set_keymap(s:buf, "i", "<c-j>", "<down>", l:map_options)
 
-	" Map <c-p> & <c-n> for moving up and down
-	call nvim_buf_set_keymap(s:buf, "n", "<c-p>", "<up>", l:map_options)
-	call nvim_buf_set_keymap(s:buf, "i", "<c-p>", "<up>", l:map_options)
-	call nvim_buf_set_keymap(s:buf, "n", "<c-n>", "<down>", l:map_options)
-	call nvim_buf_set_keymap(s:buf, "i", "<c-n>", "<down>", l:map_options)
+    " Map <c-p> & <c-n> for moving up and down
+    call nvim_buf_set_keymap(s:buf, "n", "<c-p>", "<up>", l:map_options)
+    call nvim_buf_set_keymap(s:buf, "i", "<c-p>", "<up>", l:map_options)
+    call nvim_buf_set_keymap(s:buf, "n", "<c-n>", "<down>", l:map_options)
+    call nvim_buf_set_keymap(s:buf, "i", "<c-n>", "<down>", l:map_options)
+  else
+    function! RegisterPopupFilter(winid, key)
+      let l:a = (type(a:key) == v:t_number)? nr2char(a:key) : a:key
+      echom "Typed " .. a:key .. " - " .. l:a
+
+      if has_key(s:mappings, a:key)
+        let l:a = 1
+      elseif has_key(s:movement_keymaps, a:key)
+        let l:action = s:movement_keymaps[a:key]
+        if l:action == "ESC"
+          call registers#CloseWindow()
+        else
+          call win_execute(s:win, 'call registers#CursorMovement("' .. l:action .. '")')
+        endif
+      else
+        call registers#CloseWindow()
+      endif
+      return 1
+    endfunction
+    call popup_setoptions(s:win, {
+          \ 'filtermode': 'nvi',
+          \ 'filter': 'RegisterPopupFilter',
+          \})
+  endif
 
 endfunction
 
@@ -237,12 +338,13 @@ function! registers#ApplyRegister(reg)
 
   if l:sleep is v:true && l:line > 0 && s:register_key_sleep > 0
 		" Move the cursor
-		call nvim_win_set_cursor(s:win, [l:line, 0])
+    call cursor(l:line, 0)
+		" call nvim_win_set_cursor(s:win, [l:line, 0])
 
 		" Redraw so the line get's highlighted
     silent! redraw
 
-    " XXX (k): <2021-07-27> 
+    " XXX (k): <2021-07-27>
 		" Wait for some time before closing the window
     " execute "sleep" .. s:register_key_sleep
     
@@ -264,7 +366,7 @@ function! registers#ApplyRegister(reg)
     endif
 
 
-    " XXX (k): <2021-07-27> 
+    " XXX (k): <2021-07-27>
     let l:lines = split(getreg(l:reg), "\n")
     " XXX (k): <2021-07-27> friendly but didn't act like origin neovim
     call nvim_put(l:lines, "b", s:cursor_is_last, v:true)
@@ -298,33 +400,27 @@ function! registers#UpdateView()
     let l:lines = add(l:lines, l:line)
   endfor
 
-	" Write the lines to the buffer
-	call nvim_buf_set_lines(s:buf, 0, -1, v:false, l:lines)
+  if has("nvim")
+    call nvim_buf_set_lines(s:buf, 0, -1, v:false, l:lines)
+  else
+    call popup_settext(s:win, l:lines)
+  endif
 
-	" Don't allow the buffer to be modified
-	call nvim_buf_set_option(s:buf, "modifiable", v:false)
+  call setbufvar(s:buf, "&modifiable", 0)
 
 endfunction
 
 
 function! registers#InvokeRegisters(mode)
-
-  " let l:mode = a:0 > 0 ? a:1 : "n"
-
-	" Keep track of the mode that's used to open the popup
   let s:invocation_mode = a:mode
 
-	" Keep track of the count that's used to invoke the window so it can be applied again
   let s:operator_count = get(v:, "count")
 
-	" Keep track of whether the cursor is at the last character of the line in insert mode
   if a:mode == "i"
     let s:cursor_is_last = col(".") == col("$") - 1
   endif
 
-	" Close the old window if it's still open
   call registers#CloseWindow()
-
   call registers#OpenWindow()
   call registers#SetMappings()
   call registers#UpdateView()

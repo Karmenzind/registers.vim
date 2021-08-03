@@ -1,6 +1,13 @@
 " Maintainer:  kmz <valesail7@gmail.com>
 
-if !has('nvim') | finish | endif
+if !has('nvim')
+  " FIXME (k): <2021-08-02>
+  " finish
+  if !exists('*popup_create')
+    echom "[registers.vim] needs Neovim or Vim8 with popup window support."
+    finish
+  endif
+endif
 
 " Prevent loading file twice
 if exists('g:registers_loaded') | finish | endif
