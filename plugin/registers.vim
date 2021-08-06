@@ -2,7 +2,7 @@
 
 if !has('nvim')
   " FIXME (k): <2021-08-02>
-  " finish
+  finish
   if !exists('*popup_create')
     echom "[registers.vim] needs Neovim or Vim8 with popup window support."
     finish

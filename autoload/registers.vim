@@ -217,8 +217,10 @@ function! registers#OpenWindow()
     call feedkeys("\<C-[>", "n")
   endif
 
-  hi PopupRegisters ctermbg=NONE guibg=NONE
-  call setwinvar(s:win, '&wincolor', 'PopupRegisters')
+  if !has('nvim')
+    hi PopupRegisters ctermbg=NONE guibg=NONE
+    call setwinvar(s:win, '&wincolor', 'PopupRegisters')
+  endif
 endfunction
 
 function! registers#CloseWindow()
