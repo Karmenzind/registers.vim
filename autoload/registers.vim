@@ -2,26 +2,32 @@
 " vars
 " --------------------------------------------
 
-let s:tab_symbol = get(g:, "registers_tab_symbol", "·")
-let s:space_symbol = get(g:, "registers_space_symbol", " ")
-let s:return_symbol = get(g:, "registers_return_symbol", "⏎")
-let s:register_key_sleep = get(g:, "registers_register_key_sleep", 0)
+let s:tab_symbol           = get(g:, "registers_tab_symbol",           "·")
+let s:space_symbol         = get(g:, "registers_space_symbol",         " ")
+let s:return_symbol        = get(g:, "registers_return_symbol",        "⏎")
+let s:register_key_sleep   = get(g:, "registers_register_key_sleep",   0)
 let s:show_empty_registers = get(g:, "registers_show_empty_registers", 1)
+let s:debug                = get(g:, "registers_debug",                1)
 
-let s:register_map = { "selection": ["*", "+"],
-      \ "unnamed": ["\""],
-      \ "delete": ["-"],
-      \ "read-only": [":", ".", "%"],
+let s:logfile = "/tmp/vim_registers.log"
+
+let s:register_map = {
+      \ "selection":           ["*", "+"],
+      \ "unnamed":             ["\""],
+      \ "delete":              ["-"],
+      \ "read-only":           [":", ".", "%"],
       \ "last search pattern": ["/"],
-      \ "numbered": ["0", "1", "2", "3", "4", "5", "7", "8", "9"],
-      \ "named": [ "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", ],
-      \ "alternate buffer": ["#"],
-      \ "expression": ["="],
-      \ "black hole": ["_"] }
+      \ "numbered":            ["0", "1", "2", "3", "4", "5", "7", "8", "9"],
+      \ "named":               [ "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", ],
+      \ "alternate buffer":    ["#"],
+      \ "expression":          ["="],
+      \ "black hole":          ["_"] }
 
 let s:register_sequence = ["selection", "unnamed", "delete", "read-only", "last search pattern", "numbered", "named", "alternate buffer", "expression", "black hole"]
 
 let s:reg_lines = []
+let s:empty_reg_line = v:null
+let s:empty_regs = []
 
 let s:buf = v:null
 let s:win = v:null
@@ -31,25 +37,40 @@ let s:mappings = {}
 
 
 let s:movement_keymaps = {
-      \ "\<ESC>": 'ESC',
-      \ "\<CR>": 'ENTER',
-      \ "\<UP>": 'UP',
-      \ "\<DOWN>": 'DOWN',
-      \ "\<c-j>": 'DOWN',
-      \ "\<c-k>": 'UP',
-      \ "\<c-n>": 'NEXT',
-      \ "\<c-p>": 'PREV',
-      \ "\<c-b>": 'PAGEUP',
-      \ "\<c-f>": 'PAGEDOWN',
-      \ "\<c-u>": 'HALFUP',
-      \ "\<c-d>": 'HALFDOWN',
-      \ "\<PageUp>": 'PAGEUP',
+      \ "\<ESC>":      'ESC',
+      \ "\<CR>":       'ENTER',
+      \ "\<UP>":       'UP',
+      \ "\<DOWN>":     'DOWN',
+      \ "\<c-j>":      'DOWN',
+      \ "\<c-k>":      'UP',
+      \ "\<c-n>":      'NEXT',
+      \ "\<c-p>":      'PREV',
+      \ "\<c-b>":      'PAGEUP',
+      \ "\<c-f>":      'PAGEDOWN',
+      \ "\<c-u>":      'HALFUP',
+      \ "\<c-d>":      'HALFDOWN',
+      \ "\<PageUp>":   'PAGEUP',
       \ "\<PageDown>": 'PAGEDOWN',
-      \ "G": 'BOTTOM',
+      \ "G":           'BOTTOM',
       \ }
+
 " --------------------------------------------
 " funcs
 " --------------------------------------------
+function! s:log(msg)
+  if s:debug == 1
+    if type(a:msg) != v:t_string && type(a:msg) != v:t_number
+      let l:msg = string(a:msg)
+    else
+      let l:msg = a:msg
+    endif
+
+	  if exists("*strftime")
+      let l:msg = strftime("%y-%m-%d %T") .. " " .. l:msg
+    endif
+    call writefile([l:msg], s:logfile, "a")
+  endif
+endfunction
 
 function! registers#CursorMovement(where)
 	let curline = line('.')
@@ -102,7 +123,7 @@ function! s:EscapeContents(raw)
 endfunction
 
 function! s:ReadRegisters()
-  let l:empty_regs = []
+  let s:empty_regs = []
   " reset ? XXX (K): <2021-07-23>
   let s:reg_lines = []
 
@@ -116,15 +137,15 @@ function! s:ReadRegisters()
 
         call add(s:reg_lines, {"register": reg, "line": l:line, "ignore": v:false})
       elseif s:show_empty_registers == 1
-        call add(l:empty_regs, reg)
-
+        call add(s:empty_regs, reg)
       endif
     endfor
   endfor
 
-  if len(l:empty_regs) > 0
-    let l:line = "Empty" .. join(l:empty_regs, " ")
-    call add(s:reg_lines, {"line": l:line, "ignore": v:true})
+  if len(s:empty_regs) > 0
+    let l:line = "Empty" .. join(s:empty_regs, " ")
+    let s:empty_reg_line = {"line": l:line, "ignore": v:true}
+    call add(s:reg_lines, s:empty_reg_line)
   endif
 
 endfunction
@@ -135,7 +156,7 @@ function! registers#OpenWindow()
   " let s:buf = nvim_create_buf(v:false, v:true)
   let s:buf = bufadd("")
   silent call bufload(s:buf)
-  echom "Opened register in buffer " .. s:buf
+  call s:log("Opened register in buffer " .. s:buf)
 
   call setbufvar(s:buf, "&bufhidden", "wipe")
   call setbufvar(s:buf, "&filetype", "registers")
@@ -149,7 +170,11 @@ function! registers#OpenWindow()
 	" Calculate the floating window size
   " If the whole buffer doesn't fit, use the size from the current line to the height
 	let l:win_height = min([len(s:reg_lines), min([l:height - l:win_line, s:Round2Int(ceil(l:height * 0.8 - 4))])])
-	let l:win_width = s:Round2Int(ceil(l:width * 0.8))
+  if has("nvim")
+    let l:win_width = s:Round2Int(ceil(l:width * 0.8))
+  else
+    let l:win_width = s:Round2Int(ceil(l:width * 0.8))
+  endif
 
 	" Set window at cursor position, unless the cursor is too close the bottom of the window
 	" Too close is what the user set as scrolloff
@@ -180,13 +205,13 @@ function! registers#OpenWindow()
     let s:win = nvim_open_win(s:buf, v:true, l:opts)
   else
     let l:popup_opts = {
-          \ 'wrap':0, 
-          \ 'mapping':0, 
+          \ 'wrap':0,
+          \ 'mapping':0,
           \ 'zindex': 100,
           \ 'moved': 'any',
-          \ 'hidden':0, 
-          \ 'cursorline':1, 
-          \ 'cursorcolumn':1, 
+          \ 'hidden':0,
+          \ 'cursorline':1,
+          \ 'cursorcolumn':1,
           \ 'line': 'cursor+1', 'col': 'cursor+1',
           \ 'maxwidth': l:win_width, 'maxheight': l:win_height,
           \ 'close': 'none',
@@ -195,10 +220,9 @@ function! registers#OpenWindow()
           \ 'borderchars': ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
           \ }
     let s:win = popup_create(s:buf, l:popup_opts)
-    echom "Using win " .. s:win
-    " call popup_show(s:win)
   endif
-  
+  call s:log("Created win " .. s:win)
+
 	let s:max_width = l:win_width
 
   if has('nvim')
@@ -265,6 +289,7 @@ function! registers#SetMappings()
         \ }
 
   if has('nvim')
+    " call s:log("Got s:mappings: " .. string(s:mappings))
     for [key, func] in items(s:mappings)
       " let l:callback = ("<cmd>lua require\"registers\".%s<cr>"):format(func)
       let l:callback = printf(":call registers#%s<cr>", func)
@@ -274,13 +299,11 @@ function! registers#SetMappings()
       call nvim_buf_set_keymap(s:buf, "v", key, l:callback, l:map_options)
     endfor
 
-    " Map <c-k> & <c-j> for moving up and down
+    " moving
     call nvim_buf_set_keymap(s:buf, "n", "<c-k>", "<up>", l:map_options)
     call nvim_buf_set_keymap(s:buf, "i", "<c-k>", "<up>", l:map_options)
     call nvim_buf_set_keymap(s:buf, "n", "<c-j>", "<down>", l:map_options)
     call nvim_buf_set_keymap(s:buf, "i", "<c-j>", "<down>", l:map_options)
-
-    " Map <c-p> & <c-n> for moving up and down
     call nvim_buf_set_keymap(s:buf, "n", "<c-p>", "<up>", l:map_options)
     call nvim_buf_set_keymap(s:buf, "i", "<c-p>", "<up>", l:map_options)
     call nvim_buf_set_keymap(s:buf, "n", "<c-n>", "<down>", l:map_options)
@@ -288,10 +311,10 @@ function! registers#SetMappings()
   else
     function! RegisterPopupFilter(winid, key)
       let l:a = (type(a:key) == v:t_number)? nr2char(a:key) : a:key
-      echom "Typed " .. a:key .. " - " .. l:a
+      call s:log("Typed key: " .. a:key .. " Escaped: " .. l:a)
 
       if has_key(s:mappings, a:key)
-        let l:a = 1
+        call registers#ApplyRegister(l:a)
       elseif has_key(s:movement_keymaps, a:key)
         let l:action = s:movement_keymaps[a:key]
         if l:action == "ESC"
@@ -313,23 +336,35 @@ function! registers#SetMappings()
 endfunction
 
 function! registers#ApplyRegister(reg)
+  call s:log("Start applying register " .. a:reg)
   let l:line = 0
   let l:sleep = v:true
   let l:reg = a:reg
 
-  if l:reg is v:null
-		let l:line = line(".")
+  if l:reg is v:null || index(s:empty_regs, l:reg) >= 0
     let l:sleep = v:false
 
-    let l:reg_line = s:reg_lines[l:line - 1]
+		let l:line = line(".")
+
+    if l:reg is v:null
+      " let l:reg_line = s:reg_lines[l:line - 1]
+      let l:reg_line = s:reg_lines[-1]
+    else
+      let l:reg_line = s:empty_reg_line
+    endif
+
+    " XXX (k): <2021-08-18>
     if l:reg_line["ignore"] is v:true
       call registers#CloseWindow()
     endif
 
-    let l:reg = l:reg_line["register"]
+    if l:reg is v:null
+      let l:reg = l:reg_line["register"]
+    endif
   else
     let l:idx = 0
 		for reg_line in s:reg_lines
+      " call s:log(reg_line)
 			if reg_line["register"] == l:reg
 				let l:line = l:idx + 1
 				break
@@ -349,7 +384,7 @@ function! registers#ApplyRegister(reg)
     " XXX (k): <2021-07-27>
 		" Wait for some time before closing the window
     " execute "sleep" .. s:register_key_sleep
-    
+
     " silent! sleep s:register_key_sleep
     " call nvim_command(("silent! sleep %d"):format(config().register_key_sleep))
   endif
@@ -357,21 +392,27 @@ function! registers#ApplyRegister(reg)
   call registers#CloseWindow()
 
   if s:invocation_mode == "i"
-    if l:reg == "="
-      let l:key = nvim_replace_termcodes("<c-r>", v:true, v:true, v:true)
-      " call nvim_feedkeys("i" .. l:key .. l:reg, "n", v:true)
-      call feedkeys("i" .. l:key .. l:reg, "n")
+    if has("nvim")
+      " start from normal mode
+      if l:reg == "="
+        let l:key = nvim_replace_termcodes("<c-r>", v:true, v:true, v:true)
+        " call nvim_feedkeys("i" .. l:key .. l:reg, "n", v:true)
+        call feedkeys("i" .. l:key .. l:reg, "n")
+      endif
+
+      if l:line == 0
+        return
+      endif
+
+
+      " XXX (k): <2021-07-27>
+      let l:lines = split(getreg(l:reg), "\n")
+      " XXX (k): <2021-07-27> friendly but didn't act like origin neovim
+      call nvim_put(l:lines, "b", s:cursor_is_last, v:true)
+      call feedkeys("a")
+    else
+      call feedkeys("" .. l:reg, "n")
     endif
-
-    if l:line == 0
-      return
-    endif
-
-
-    " XXX (k): <2021-07-27>
-    let l:lines = split(getreg(l:reg), "\n")
-    " XXX (k): <2021-07-27> friendly but didn't act like origin neovim
-    call nvim_put(l:lines, "b", s:cursor_is_last, v:true)
   else
     let l:keys = ""
     if s:invocation_mode == "n"

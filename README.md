@@ -34,10 +34,12 @@ Vim 8.2+ or NeoVim 0.4.4+ is required.
 ## TODO
 
 - preview full content in the second floating window
+- terminal mode
 - theme setup
 - support opening register window in a floating Tmux pane
 - redraw floating window when buffer/window size changed
 
 Bugs:
 
-- vim8 window disappear after secs
+- vim8: window disappear after secs
+- vim8: weird popup size in different window
