@@ -2,15 +2,21 @@
 " vars
 " --------------------------------------------
 
-let s:tab_symbol           = get(g:, "registers_tab_symbol",           "·")
-let s:space_symbol         = get(g:, "registers_space_symbol",         " ")
-let s:return_symbol        = get(g:, "registers_return_symbol",        "⏎")
-let s:register_key_sleep   = get(g:, "registers_register_key_sleep",   0)
+" customable configs
+let s:tab_symbol           = get(g:, "registers_tab_symbol", "·")
+let s:space_symbol         = get(g:, "registers_space_symbol", " ")
+let s:return_symbol        = get(g:, "registers_return_symbol", "⏎")
+let s:register_key_sleep   = get(g:, "registers_register_key_sleep", 0)
 let s:show_empty_registers = get(g:, "registers_show_empty_registers", 1)
-let s:debug                = get(g:, "registers_debug",                1)
+let s:debug                = get(g:, "registers_debug", 1)
+let s:ctrl_r_literally     = get(g:, "registers_ctrl_r_literally", 1)
+let s:preview_key          = get(g:, "registers_preview_key","K")
+let s:preview_max_lines    = get(g:, "registers_preview_max_lines", 20)
+let s:preview_max_chars    = get(g:, "registers_preview_max_chars", 2048)
 
+" other configs
 let s:logfile = "/tmp/vim_registers.log"
-
+let s:preview_key = 'K'
 let s:register_map = {
       \ "selection":           ["*", "+"],
       \ "unnamed":             ["\""],
@@ -24,17 +30,6 @@ let s:register_map = {
       \ "black hole":          ["_"] }
 
 let s:register_sequence = ["selection", "unnamed", "delete", "read-only", "last search pattern", "numbered", "named", "alternate buffer", "expression", "black hole"]
-
-let s:reg_lines = []
-let s:empty_reg_line = v:null
-let s:empty_regs = []
-
-let s:buf = v:null
-let s:win = v:null
-let s:invocation_mode = v:null
-let s:operator_count = 0
-let s:mappings = {}
-
 
 let s:movement_keymaps = {
       \ "\<ESC>":      'ESC',
@@ -54,9 +49,66 @@ let s:movement_keymaps = {
       \ "G":           'BOTTOM',
       \ }
 
+let s:e_regs = []
+let s:ne_regs = []
+let s:buf_lines = []
+
+" win/buf
+let s:buf = v:null
+let s:win = v:null
+let s:preview_win = v:null
+
+let s:invocation_mode = v:null
+let s:operator_count = 0
+let s:mappings = {}
+
 " --------------------------------------------
 " funcs
 " --------------------------------------------
+
+function! s:CurLineReg()
+  let ln = line('.', s:win)
+  let reg = v:null
+  if !(ln == line('$', s:win) && len(s:e_regs) > 0)
+    let reg = s:ne_regs[ln-1]
+  endif
+  call s:log("Got current line reg: " .. reg)
+  return reg
+endfunction
+
+function! registers#ViewCurLine()
+  let ln = line('.', s:win)
+  if ln == line('$', s:win) && len(s:e_regs) > 0
+    echo "Empty register."
+  else
+    let reg = s:ne_regs[ln-1]
+    call s:log("Previewing " .. reg)
+    " let s:preview_win = popup_notification(getreg(reg), #{
+    let c = split(getreg(l:reg)[0:s:preview_max_chars], "\n")[0:s:preview_max_lines]
+    " TODO (k): <2021-08-19> title
+    let s:preview_win = popup_notification(c, #{
+          \ scrollbar:    0,
+          \ time:  3000,
+          \ moved: 'any',
+          \ line:  'cursor+1',
+          \ col:   'cursor+3',
+          \ })
+    call setwinvar(s:preview_win, '&wincolor', 'PopupRegisters')
+  endif
+endfunction
+
+function! s:ClosePreviewWin()
+  if s:preview_win is v:null
+    return
+  endif
+  if has('nvim')
+    let a = 1
+  else
+    call popup_close(s:preview_win)
+  endif
+  let s:preview_win = v:null
+endfunction
+
 function! s:log(msg)
   if s:debug == 1
     if type(a:msg) != v:t_string && type(a:msg) != v:t_number
@@ -123,34 +175,42 @@ function! s:EscapeContents(raw)
 endfunction
 
 function! s:ReadRegisters()
-  let s:empty_regs = []
-  " reset ? XXX (K): <2021-07-23>
-  let s:reg_lines = []
+  let s:buf_lines = []
+  let s:e_regs = []
+  let s:buf_lines = []
 
   for reg_type in s:register_sequence
     for reg in s:register_map[reg_type]
       let l:raw = getreg(reg, 1)
 
+      let l:idx = 0
       if len(l:raw) > 0
         " XXX: cut the long string
         let l:line = reg .. ": " .. s:EscapeContents(l:raw)
+        let l:line = l:line[0:s:max_width]
 
-        call add(s:reg_lines, {"register": reg, "line": l:line, "ignore": v:false})
+        call add(s:ne_regs, reg)
+        call add(s:buf_lines, l:line)
       elseif s:show_empty_registers == 1
-        call add(s:empty_regs, reg)
+        call add(s:e_regs, reg)
       endif
     endfor
   endfor
 
-  if len(s:empty_regs) > 0
-    let l:line = "Empty" .. join(s:empty_regs, " ")
-    let s:empty_reg_line = {"line": l:line, "ignore": v:true}
-    call add(s:reg_lines, s:empty_reg_line)
+  if len(s:e_regs) > 0
+    let l:line = "Empty" .. join(s:e_regs, " ")
+    call add(s:buf_lines, l:line)
   endif
 
 endfunction
 
 function! registers#OpenWindow()
+	let l:width = &columns
+	let l:height = &lines
+  let l:win_line = winline()
+  let l:win_width = s:Round2Int(ceil(l:width * 0.8))
+	let s:max_width = l:win_width
+
   call s:ReadRegisters()
 
   " let s:buf = nvim_create_buf(v:false, v:true)
@@ -162,20 +222,10 @@ function! registers#OpenWindow()
   call setbufvar(s:buf, "&filetype", "registers")
   call setbufvar(s:buf, "&omnifunc", "")
 
-	let l:width = &columns
-	let l:height = &lines
-
-  let l:win_line = winline()
-
 	" Calculate the floating window size
   " If the whole buffer doesn't fit, use the size from the current line to the height
-	let l:win_height = min([len(s:reg_lines), min([l:height - l:win_line, s:Round2Int(ceil(l:height * 0.8 - 4))])])
-  if has("nvim")
-    let l:win_width = s:Round2Int(ceil(l:width * 0.8))
-  else
-    let l:win_width = s:Round2Int(ceil(l:width * 0.8))
-  endif
-
+	let l:win_height = min([len(s:buf_lines), min([l:height - l:win_line, s:Round2Int(ceil(l:height * 0.8 - 4))])])
+ 
 	" Set window at cursor position, unless the cursor is too close the bottom of the window
 	" Too close is what the user set as scrolloff
 	let l:user_scrolloff = &scrolloff
@@ -191,39 +241,42 @@ function! registers#OpenWindow()
   endif
 
   " Position it next to the cursor
-	let l:opts = {
-        \ "border": "rounded",
-        \ "style": "minimal",
-        \ "relative": "cursor",
-        \ "width":  l:win_width,
-        \ "height":  l:win_height,
-        \ "row":  l:opts_row,
-        \ "col":  0
-        \}
-
   if has('nvim')
+    let l:opts = {
+          \ "border":   "rounded",
+          \ "style":    "minimal",
+          \ "relative": "cursor",
+          \ "width":    l:win_width,
+          \ "height":   l:win_height,
+          \ "row":      l:opts_row,
+          \ "col":      0
+          \}
+
     let s:win = nvim_open_win(s:buf, v:true, l:opts)
   else
-    let l:popup_opts = {
-          \ 'wrap':0,
-          \ 'mapping':0,
-          \ 'zindex': 100,
-          \ 'moved': 'any',
-          \ 'hidden':0,
-          \ 'cursorline':1,
-          \ 'cursorcolumn':1,
-          \ 'line': 'cursor+1', 'col': 'cursor+1',
-          \ 'maxwidth': l:win_width, 'maxheight': l:win_height,
-          \ 'close': 'none',
-          \ 'scrollbar': 1,
-          \ 'border': [1,1,1,1],
-          \ 'borderchars': ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
+    " FIXME (k): <2021-08-19> time??
+    let l:popup_opts = #{
+          \ wrap:         0,
+          \ mapping:      0,
+          \ zindex:       100,
+          \ moved:        'any',
+          \ hidden:       0,
+          \ cursorline:   1,
+          \ cursorcolumn: 1,
+          \ line:         'cursor+1',
+          \ col:          'cursor+1',
+          \ maxwidth:     l:win_width,
+          \ maxheight:    l:win_height,
+          \ close:        'none',
+          \ scrollbar:    1,
+          \ border:       [1,1,1,1],
+          \ borderchars:  ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
+          \ time: 100000,
           \ }
     let s:win = popup_create(s:buf, l:popup_opts)
+    " call s:log("Popup info " .. string(popup_getoptions(s:win)))
   endif
   call s:log("Created win " .. s:win)
-
-	let s:max_width = l:win_width
 
   if has('nvim')
     augroup registers_specifics
@@ -258,18 +311,23 @@ function! registers#CloseWindow()
     call popup_close(s:win)
   endif
 
-  " execute "q!"
-  " XXX (k): <2021-07-30> didn't work. why?
-  " execute s:win.'wincmd c'
   let s:win = v:null
 endfunction
 
 function! registers#SetMappings()
   " FIXME (k): <2021-07-27> [] ?
-  let s:mappings = {
-        \ "<CR>": "ApplyRegister(v:null)",
-		    \ "<ESC>": "CloseWindow()",
-        \ }
+  if has('nvim')
+    let s:mappings = {
+          \ "<CR>":  "ApplyRegister(v:null)",
+          \ "<ESC>": "CloseWindow()",
+          \ }
+  else
+    let s:mappings = {
+          \ "\<CR>":  "ApplyRegister(v:null)",
+          \ "\<ESC>": "CloseWindow()",
+          \ }
+  endif
+  let s:mappings["K"] = "ViewCurLine()"
 
   for registers in values(s:register_map)
     for l:reg in registers
@@ -289,7 +347,6 @@ function! registers#SetMappings()
         \ }
 
   if has('nvim')
-    " call s:log("Got s:mappings: " .. string(s:mappings))
     for [key, func] in items(s:mappings)
       " let l:callback = ("<cmd>lua require\"registers\".%s<cr>"):format(func)
       let l:callback = printf(":call registers#%s<cr>", func)
@@ -310,13 +367,15 @@ function! registers#SetMappings()
     call nvim_buf_set_keymap(s:buf, "i", "<c-n>", "<down>", l:map_options)
   else
     function! RegisterPopupFilter(winid, key)
+      call s:ClosePreviewWin()
       let l:a = (type(a:key) == v:t_number)? nr2char(a:key) : a:key
-      call s:log("Typed key: " .. a:key .. " Escaped: " .. l:a)
+      call s:log("Typed key: " .. a:key .. " Escaped: " .. l:a .. "\r")
 
       if has_key(s:mappings, a:key)
-        call registers#ApplyRegister(l:a)
+        execute printf("call registers#%s", s:mappings[a:key])
       elseif has_key(s:movement_keymaps, a:key)
         let l:action = s:movement_keymaps[a:key]
+        call s:log(printf("Got movement %s -> %s\n", a:key, l:action))
         if l:action == "ESC"
           call registers#CloseWindow()
         else
@@ -337,46 +396,30 @@ endfunction
 
 function! registers#ApplyRegister(reg)
   call s:log("Start applying register " .. a:reg)
-  let l:line = 0
+  let l:ln = 0
   let l:sleep = v:true
-  let l:reg = a:reg
-
-  if l:reg is v:null || index(s:empty_regs, l:reg) >= 0
-    let l:sleep = v:false
-
-		let l:line = line(".")
-
+  if a:reg is v:null
+    let l:reg = s:CurLineReg()
     if l:reg is v:null
-      " let l:reg_line = s:reg_lines[l:line - 1]
-      let l:reg_line = s:reg_lines[-1]
-    else
-      let l:reg_line = s:empty_reg_line
-    endif
-
-    " XXX (k): <2021-08-18>
-    if l:reg_line["ignore"] is v:true
-      call registers#CloseWindow()
-    endif
-
-    if l:reg is v:null
-      let l:reg = l:reg_line["register"]
+      " empty reg, nothing to do
+      return registers#CloseWindow()
     endif
   else
-    let l:idx = 0
-		for reg_line in s:reg_lines
-      " call s:log(reg_line)
-			if reg_line["register"] == l:reg
-				let l:line = l:idx + 1
-				break
-      endif
-      let l:idx = l:idx + 1
-    endfor
+    let l:reg = a:reg
   endif
 
-  if l:sleep is v:true && l:line > 0 && s:register_key_sleep > 0
+  " empty
+  if index(s:e_regs, l:reg) >= 0
+    let l:sleep = v:false
+    call registers#CloseWindow()
+  else
+    let l:ln = index(s:ne_regs, l:reg) + 1
+  endif
+
+  if l:sleep is v:true && l:ln > 0 && s:register_key_sleep > 0
 		" Move the cursor
-    call cursor(l:line, 0)
-		" call nvim_win_set_cursor(s:win, [l:line, 0])
+    call cursor(l:ln, 0)
+		" call nvim_win_set_cursor(s:win, [l:ln, 0])
 
 		" Redraw so the line get's highlighted
     silent! redraw
@@ -400,10 +443,9 @@ function! registers#ApplyRegister(reg)
         call feedkeys("i" .. l:key .. l:reg, "n")
       endif
 
-      if l:line == 0
+      if l:ln == 0
         return
       endif
-
 
       " XXX (k): <2021-07-27>
       let l:lines = split(getreg(l:reg), "\n")
@@ -411,7 +453,11 @@ function! registers#ApplyRegister(reg)
       call nvim_put(l:lines, "b", s:cursor_is_last, v:true)
       call feedkeys("a")
     else
-      call feedkeys("" .. l:reg, "n")
+      if s:ctrl_r_literally == 1
+        call feedkeys("" .. l:reg, "n")
+      else
+        call feedkeys("" .. l:reg, "n")
+      endif
     endif
   else
     let l:keys = ""
@@ -435,22 +481,13 @@ function! registers#ApplyRegister(reg)
 endfunction
 
 function! registers#UpdateView()
-	" Create a array of lines from all the registers
-	let l:lines = []
-
-  for reg in s:reg_lines
-    let l:line = reg["line"][0:s:max_width]
-    let l:lines = add(l:lines, l:line)
-  endfor
-
   if has("nvim")
-    call nvim_buf_set_lines(s:buf, 0, -1, v:false, l:lines)
+    call nvim_buf_set_lines(s:buf, 0, -1, v:false, s:buf_lines)
   else
-    call popup_settext(s:win, l:lines)
+    call popup_settext(s:win, s:buf_lines)
   endif
 
   call setbufvar(s:buf, "&modifiable", 0)
-
 endfunction
 
 
@@ -467,5 +504,4 @@ function! registers#InvokeRegisters(mode)
   call registers#OpenWindow()
   call registers#SetMappings()
   call registers#UpdateView()
-
 endfunction
