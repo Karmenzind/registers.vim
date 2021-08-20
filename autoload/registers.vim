@@ -11,7 +11,7 @@ let s:show_empty_registers = get(g:, "registers_show_empty_registers", 1)
 let s:debug                = get(g:, "registers_debug", 1)
 let s:ctrl_r_literally     = get(g:, "registers_ctrl_r_literally", 1)
 let s:preview_key          = get(g:, "registers_preview_key","K")
-let s:preview_max_lines    = get(g:, "registers_preview_max_lines", 20)
+let s:preview_max_lines    = get(g:, "registers_preview_max_lines", 30)
 let s:preview_max_chars    = get(g:, "registers_preview_max_chars", 2048)
 
 " other configs
@@ -57,6 +57,7 @@ let s:buf_lines = []
 let s:buf = v:null
 let s:win = v:null
 let s:preview_win = v:null
+let s:preview_buf = v:null
 
 let s:invocation_mode = v:null
 let s:operator_count = 0
@@ -66,17 +67,27 @@ let s:mappings = {}
 " funcs
 " --------------------------------------------
 
+function! s:PostCursorMoved()
+  let ln = line('.', s:win)
+  call cursor(0, 1)
+  call s:CurLineReg()
+
+  call s:ClosePreviewWin()
+  call s:ClosePreviewWin()
+endfunction
+
+
 function! s:CurLineReg()
   let ln = line('.', s:win)
   let reg = v:null
   if !(ln == line('$', s:win) && len(s:e_regs) > 0)
     let reg = s:ne_regs[ln-1]
   endif
-  call s:log("Got current line reg: " .. reg)
+  call s:log("Current line: " .. string(ln) .. " reg: " .. reg)
   return reg
 endfunction
 
-function! registers#ViewCurLine()
+function! registers#PreviewCurLine()
   let ln = line('.', s:win)
   if ln == line('$', s:win) && len(s:e_regs) > 0
     echo "Empty register."
@@ -84,16 +95,51 @@ function! registers#ViewCurLine()
     let reg = s:ne_regs[ln-1]
     call s:log("Previewing " .. reg)
     " let s:preview_win = popup_notification(getreg(reg), #{
-    let c = split(getreg(l:reg)[0:s:preview_max_chars], "\n")[0:s:preview_max_lines]
-    " TODO (k): <2021-08-19> title
-    let s:preview_win = popup_notification(c, #{
-          \ scrollbar:    0,
-          \ time:  3000,
-          \ moved: 'any',
-          \ line:  'cursor+1',
-          \ col:   'cursor+3',
-          \ })
-    call setwinvar(s:preview_win, '&wincolor', 'PopupRegisters')
+    let raw = getreg(l:reg)
+    let c = split(raw[0:s:preview_max_chars], "\n")
+    let total_lines = len(c)
+    let c = c[0:s:preview_max_lines]
+
+    let w = 1
+    for l in c
+      if len(l) >= s:max_width
+        let w = s:max_width
+        break
+      endif
+      if len(l) > w
+        let w = len(l)
+      endif
+    endfor
+
+    if has('nvim')
+      let s:preview_buf = nvim_create_buf(v:false, v:true)
+      call nvim_buf_set_lines(s:preview_buf, 0, -1, v:true, c)
+      " silent call bufload(s:preview_buf)
+      call setbufvar(s:preview_buf, "&bufhidden", "wipe")
+      " call setbufvar(s:preview_buf, "&filetype", "registers")
+      call setbufvar(s:preview_buf, "&omnifunc", "")
+      let s:preview_win = nvim_open_win(s:preview_buf, v:false, #{
+            \ relative: "win",
+            \ win: s:win,
+            \ bufpos: [1, 5],
+            \ border: "rounded",
+            \ style: "minimal",
+            \ focusable: 0,
+            \ zindex: 200,
+            \ width: w,
+            \ height: len(c) > 0 ? len(c) : 1,
+            \ })
+    else
+      " TODO (k): <2021-08-19> title
+      let s:preview_win = popup_notification(c, #{
+            \ scrollbar:    0,
+            \ time:  3000,
+            \ moved: 'any',
+            \ line:  'cursor+1',
+            \ col:   'cursor+3',
+            \ })
+      call setwinvar(s:preview_win, '&wincolor', 'PopupRegisters')
+    endif
   endif
 endfunction
 
@@ -102,7 +148,7 @@ function! s:ClosePreviewWin()
     return
   endif
   if has('nvim')
-    let a = 1
+    call nvim_win_close(s:preview_win, v:true)
   else
     call popup_close(s:preview_win)
   endif
@@ -242,19 +288,17 @@ function! registers#OpenWindow()
 
   " Position it next to the cursor
   if has('nvim')
-    let l:opts = {
-          \ "border":   "rounded",
-          \ "style":    "minimal",
-          \ "relative": "cursor",
-          \ "width":    l:win_width,
-          \ "height":   l:win_height,
-          \ "row":      l:opts_row,
-          \ "col":      0
+    let l:float_opts = #{
+          \ border:   "rounded",
+          \ style:    "minimal",
+          \ relative: "cursor",
+          \ width:    l:win_width,
+          \ height:   l:win_height,
+          \ row:      l:opts_row,
+          \ col:      0
           \}
-
-    let s:win = nvim_open_win(s:buf, v:true, l:opts)
+    let s:win = nvim_open_win(s:buf, v:true, l:float_opts)
   else
-    " FIXME (k): <2021-08-19> time??
     let l:popup_opts = #{
           \ wrap:         0,
           \ mapping:      0,
@@ -271,7 +315,7 @@ function! registers#OpenWindow()
           \ scrollbar:    1,
           \ border:       [1,1,1,1],
           \ borderchars:  ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
-          \ time: 100000,
+          \ time:         100000,
           \ }
     let s:win = popup_create(s:buf, l:popup_opts)
     " call s:log("Popup info " .. string(popup_getoptions(s:win)))
@@ -280,8 +324,10 @@ function! registers#OpenWindow()
 
   if has('nvim')
     augroup registers_specifics
-    autocmd! BufLeave <buffer> call registers#CloseWindow()
-    autocmd! CursorMoved <buffer> call cursor(0, 1)
+    " XXX conficts with previewing
+    " autocmd! BufLeave <buffer> call registers#CloseWindow()
+    autocmd! WinLeave <buffer> call registers#CloseWindow()
+    autocmd! CursorMoved,CursorMovedI <buffer> call s:PostCursorMoved()
     augroup END
   endif
 
@@ -301,6 +347,7 @@ function! registers#OpenWindow()
 endfunction
 
 function! registers#CloseWindow()
+  call s:ClosePreviewWin()
   if s:win is v:null
     return
   endif
@@ -327,7 +374,7 @@ function! registers#SetMappings()
           \ "\<ESC>": "CloseWindow()",
           \ }
   endif
-  let s:mappings["K"] = "ViewCurLine()"
+  let s:mappings["K"] = "PreviewCurLine()"
 
   for registers in values(s:register_map)
     for l:reg in registers
@@ -395,6 +442,7 @@ function! registers#SetMappings()
 endfunction
 
 function! registers#ApplyRegister(reg)
+  call s:ClosePreviewWin()
   call s:log("Start applying register " .. a:reg)
   let l:ln = 0
   let l:sleep = v:true

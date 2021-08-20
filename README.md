@@ -4,7 +4,7 @@
 
 Enhanced viewable registers powered by floating window, for both Vim8 and NeoVim. With this plugin you should be no longer troubled by tens of confusing registers in Vim.
 
-This plugin was inspired by [registers.nvim](https://github.com/tversteeg/registers.nvim) and some NeoVim functions were rewritten from tversteeg's Lua code into pure VimScript.
+This plugin was inspired by [registers.nvim](https://github.com/tversteeg/registers.nvim).
 
 ## Install
 
