@@ -68,5 +68,4 @@ let g:registers_debug = 1
 
 Bugs:
 
-- vim8: window disappear after secs
-- vim8: weird popup size in different window
+- Vim8: insert wrong position

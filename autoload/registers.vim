@@ -73,7 +73,6 @@ function! s:PostCursorMoved()
   call s:CurLineReg()
 
   call s:ClosePreviewWin()
-  call s:ClosePreviewWin()
 endfunction
 
 
@@ -83,7 +82,7 @@ function! s:CurLineReg()
   if !(ln == line('$', s:win) && len(s:e_regs) > 0)
     let reg = s:ne_regs[ln-1]
   endif
-  call s:log("Current line: " .. string(ln) .. " reg: " .. reg)
+  call s:log(printf("[line: %s] reg: %s", ln, reg))
   return reg
 endfunction
 
@@ -94,11 +93,14 @@ function! registers#PreviewCurLine()
   else
     let reg = s:ne_regs[ln-1]
     call s:log("Previewing " .. reg)
-    " let s:preview_win = popup_notification(getreg(reg), #{
+
     let raw = getreg(l:reg)
     let c = split(raw[0:s:preview_max_chars], "\n")
     let total_lines = len(c)
     let c = c[0:s:preview_max_lines]
+
+    let header = printf("Register: %s Length: %s Lines: %s", reg, len(raw), total_lines)
+    " call insert(c, header)
 
     let w = 1
     for l in c
@@ -114,9 +116,7 @@ function! registers#PreviewCurLine()
     if has('nvim')
       let s:preview_buf = nvim_create_buf(v:false, v:true)
       call nvim_buf_set_lines(s:preview_buf, 0, -1, v:true, c)
-      " silent call bufload(s:preview_buf)
       call setbufvar(s:preview_buf, "&bufhidden", "wipe")
-      " call setbufvar(s:preview_buf, "&filetype", "registers")
       call setbufvar(s:preview_buf, "&omnifunc", "")
       let s:preview_win = nvim_open_win(s:preview_buf, v:false, #{
             \ relative: "win",
@@ -132,12 +132,16 @@ function! registers#PreviewCurLine()
     else
       " TODO (k): <2021-08-19> title
       let s:preview_win = popup_notification(c, #{
-            \ scrollbar:    0,
+            \ title: header,
+            \ scrollbar: 0,
             \ time:  3000,
             \ moved: 'any',
             \ line:  'cursor+1',
-            \ col:   'cursor+3',
+            \ col:   'cursor+4',
+            \ padding: [0, 1, 0, 1],
+            \ borderchars:  ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
             \ })
+      " call setbufvar(winbufnr(s:preview_win), '&syntax', 'txt')
       call setwinvar(s:preview_win, '&wincolor', 'PopupRegisters')
     endif
   endif
@@ -268,10 +272,8 @@ function! registers#OpenWindow()
   call setbufvar(s:buf, "&filetype", "registers")
   call setbufvar(s:buf, "&omnifunc", "")
 
-	" Calculate the floating window size
-  " If the whole buffer doesn't fit, use the size from the current line to the height
 	let l:win_height = min([len(s:buf_lines), min([l:height - l:win_line, s:Round2Int(ceil(l:height * 0.8 - 4))])])
- 
+
 	" Set window at cursor position, unless the cursor is too close the bottom of the window
 	" Too close is what the user set as scrolloff
 	let l:user_scrolloff = &scrolloff
@@ -307,18 +309,22 @@ function! registers#OpenWindow()
           \ hidden:       0,
           \ cursorline:   1,
           \ cursorcolumn: 1,
-          \ line:         'cursor+1',
-          \ col:          'cursor+1',
           \ maxwidth:     l:win_width,
           \ maxheight:    l:win_height,
           \ close:        'none',
           \ scrollbar:    1,
           \ border:       [1,1,1,1],
-          \ borderchars:  ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
+          \ borderchars:  ['-', '|', '-', '|', '╭', '╮', '╯', '╰'],
           \ time:         100000,
+          \ title:        ' Registers ',
           \ }
-    let s:win = popup_create(s:buf, l:popup_opts)
-    " call s:log("Popup info " .. string(popup_getoptions(s:win)))
+          " \ borderchars:  ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
+          " \ borderchars:  ['-', '|', '-', '|', '╭', '╮', '╯', '╰'],
+          " \ line:         'cursor+1',
+          " \ col:          'cursor+1',
+    " let s:win = popup_create(s:buf, l:popup_opts)
+    let s:win = popup_atcursor(s:buf, l:popup_opts)
+    call s:log("Popup info " .. string(popup_getoptions(s:win)))
   endif
   call s:log("Created win " .. s:win)
 
@@ -443,7 +449,7 @@ endfunction
 
 function! registers#ApplyRegister(reg)
   call s:ClosePreviewWin()
-  call s:log("Start applying register " .. a:reg)
+  call s:log("Applying register " .. a:reg)
   let l:ln = 0
   let l:sleep = v:true
   if a:reg is v:null
@@ -534,6 +540,8 @@ function! registers#UpdateView()
   else
     call popup_settext(s:win, s:buf_lines)
   endif
+
+  let s:buf_lines = []
 
   call setbufvar(s:buf, "&modifiable", 0)
 endfunction
