@@ -1,6 +1,6 @@
 # registers.vim
 
-**CURRENT STATUS: in development**
+**CURRENT STATUS: testing**
 
 Enhanced viewable registers powered by floating window, for both Vim8 and NeoVim. With this plugin you should be no longer troubled by tens of confusing registers in Vim.
 
