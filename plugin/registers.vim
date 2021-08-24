@@ -23,10 +23,12 @@ function! s:arg_opts(A, L, P)
 endfunction
 
 " Command to run our plugin
-command! -nargs=? -complete=custom,s:arg_opts Registers call registers#InvokeRegisters(<f-args>)
+command! -nargs=? -complete=custom,s:arg_opts Registers call registers#Invoke(<f-args>)
 
 " " Open the popup window when pressing <C-R> in insert mode
-inoremap <silent> <C-R> <C-O><cmd>Registers i<CR>
+" XXX (k): <2021-08-24> C-O? Why?
+" inoremap <silent> <C-R> <C-O><cmd>Registers i<CR>
+inoremap <silent> <C-R> <cmd>Registers i<CR>
 
 " " Open the popup window when pressing " in regular mode
 nnoremap <silent> " <cmd>Registers n<CR>

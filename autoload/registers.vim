@@ -63,6 +63,9 @@ let s:invocation_mode = v:null
 let s:operator_count = 0
 let s:mappings = {}
 
+" keys: lnum, col, off, curswant, indent
+let s:pos = {}
+
 " --------------------------------------------
 " funcs
 " --------------------------------------------
@@ -491,6 +494,7 @@ function! registers#ApplyRegister(reg)
   if s:invocation_mode == "i"
     if has("nvim")
       " start from normal mode
+      " call cursor(s:curpos[1], s:curpos[2], s:curpos[3], s:curpos[4])
       if l:reg == "="
         let l:key = nvim_replace_termcodes("<c-r>", v:true, v:true, v:true)
         " call nvim_feedkeys("i" .. l:key .. l:reg, "n", v:true)
@@ -504,7 +508,10 @@ function! registers#ApplyRegister(reg)
       " XXX (k): <2021-07-27>
       let l:lines = split(getreg(l:reg), "\n")
       " XXX (k): <2021-07-27> friendly but didn't act like origin neovim
-      call nvim_put(l:lines, "b", s:cursor_is_last, v:true)
+      call nvim_put(l:lines, "b", 1, v:true)
+      
+      " XXX (k): <2021-07-27> Use P?
+      " call nvim_put(l:lines, "b", s:cursor_is_last, v:true)
       call feedkeys("a")
     else
       if s:ctrl_r_literally == 1
@@ -547,13 +554,27 @@ function! registers#UpdateView()
 endfunction
 
 
-function! registers#InvokeRegisters(mode)
+function! registers#Invoke(mode)
+  " [0, lnum, col, off, curswant] 
+  let curpos = getcurpos()
+  let s:pos['lnum'] = curpos[1]
+  let s:pos['col'] = curpos[2]
+  let s:pos['off'] = curpos[3]
+  let s:pos['curswant'] = curpos[4]
+  let s:pos['indent'] = indent(s:pos['lnum'])
+
+  " if s:curpos[2] > 0 && len(getline(s:curpos)) == 0
+  " endif
+  
+  call s:log("Current position " .. string(s:pos))
+  call s:log("Current buffer line " .. string(getline(s:pos.lnum)))
   let s:invocation_mode = a:mode
 
   let s:operator_count = get(v:, "count")
 
   if a:mode == "i"
     let s:cursor_is_last = col(".") == col("$") - 1
+    call s:log("cursor is last " .. string(s:cursor_is_last))
   endif
 
   call registers#CloseWindow()

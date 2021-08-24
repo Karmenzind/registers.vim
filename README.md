@@ -36,8 +36,8 @@ Vim 8.2+ or NeoVim 0.4.4+ is required.
 Here are configration and default values.
 
 ```vim
-" In insert mode, applying a register will insert the text literally by using 'CTRL-R CTRL-R {register}' (see `:help i_CTRL-R_CTRL-R`). 
-" This differs from original 'CTRL-R {register}' (see `:help i_CTRL-R`) but could be more friendly. 
+" In insert mode, applying a register will insert the text literally by using 'CTRL-R CTRL-R {register}' (see `:help i_CTRL-R_CTRL-R`).
+" This differs from original 'CTRL-R {register}' (see `:help i_CTRL-R`) but could be more friendly.
 " Turn it off and choose `i_CTRL-R` by setting this to 0.
 let g:registers_ctrl_r_literally = 1
 
@@ -65,7 +65,5 @@ let g:registers_debug = 1
 - theme setup
 - support opening register window in a floating Tmux pane
 - redraw floating window when buffer/window size changed
+- verbose mode
 
-Bugs:
-
-- Vim8: insert wrong position
