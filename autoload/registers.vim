@@ -70,6 +70,29 @@ let s:pos = {}
 " funcs
 " --------------------------------------------
 
+function! s:GetScreenPos()
+  let wid = win_getid()
+  let curpos = getcurpos()
+  let scrpos = screenpos(wid, curpos[1], curpos[2])
+  let is_top = scrpos.row <= (&lines / 2)
+  let is_left = scrpos.col <= (&columns / 2)
+  return [scrpos, is_top, is_left]
+endfunction
+
+function! s:GetRegCurPos()
+  let ln = line('.', s:win)
+  let scrpos = screenpos(s:win, ln, 2)
+  let is_top = scrpos.row <= (&lines / 2)
+  let is_left = scrpos.col <= (&columns / 2)
+  
+  let arg = [s:preview_win, ln, 2]
+  let ret = [scrpos, is_top, is_left]
+  call s:log(printf("Get reg info screenpos with args (%s): %s", arg, ret))
+
+  return [scrpos, is_top, is_left]
+endfunction
+
+
 function! s:PostCursorMoved()
   let ln = line('.', s:win)
   call cursor(0, 1)
@@ -116,15 +139,23 @@ function! registers#PreviewCurLine()
       endif
     endfor
 
+    let [regpos, isleft, isright] = s:GetRegCurPos()
+    call s:log(s:GetRegCurPos())
+
+    let floatrow = regpos.row > 1? regpos.row - 1: regpos.row
+    let floatcol = regpos.col + (has('nvim')? 1: 2)
+
     if has('nvim')
       let s:preview_buf = nvim_create_buf(v:false, v:true)
       call nvim_buf_set_lines(s:preview_buf, 0, -1, v:true, c)
       call setbufvar(s:preview_buf, "&bufhidden", "wipe")
       call setbufvar(s:preview_buf, "&omnifunc", "")
+
       let s:preview_win = nvim_open_win(s:preview_buf, v:false, #{
-            \ relative: "win",
+            \ relative: 'win',
             \ win: s:win,
-            \ bufpos: [1, 5],
+            \ row: floatrow,
+            \ col: floatcol,
             \ border: "rounded",
             \ style: "minimal",
             \ focusable: 0,
@@ -139,8 +170,8 @@ function! registers#PreviewCurLine()
             \ scrollbar: 0,
             \ time:  3000,
             \ moved: 'any',
-            \ line:  'cursor+1',
-            \ col:   'cursor+4',
+            \ line:  floatrow,
+            \ col:   floatcol,
             \ padding: [0, 1, 0, 1],
             \ borderchars:  ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
             \ })
@@ -323,8 +354,6 @@ function! registers#OpenWindow()
           \ }
           " \ borderchars:  ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
           " \ borderchars:  ['-', '|', '-', '|', '╭', '╮', '╯', '╰'],
-          " \ line:         'cursor+1',
-          " \ col:          'cursor+1',
     " let s:win = popup_create(s:buf, l:popup_opts)
     let s:win = popup_atcursor(s:buf, l:popup_opts)
     call s:log("Popup info " .. string(popup_getoptions(s:win)))
@@ -509,7 +538,7 @@ function! registers#ApplyRegister(reg)
       let l:lines = split(getreg(l:reg), "\n")
       " XXX (k): <2021-07-27> friendly but didn't act like origin neovim
       call nvim_put(l:lines, "b", 1, v:true)
-      
+
       " XXX (k): <2021-07-27> Use P?
       " call nvim_put(l:lines, "b", s:cursor_is_last, v:true)
       call feedkeys("a")
@@ -555,7 +584,7 @@ endfunction
 
 
 function! registers#Invoke(mode)
-  " [0, lnum, col, off, curswant] 
+  " [0, lnum, col, off, curswant]
   let curpos = getcurpos()
   let s:pos['lnum'] = curpos[1]
   let s:pos['col'] = curpos[2]
@@ -565,7 +594,7 @@ function! registers#Invoke(mode)
 
   " if s:curpos[2] > 0 && len(getline(s:curpos)) == 0
   " endif
-  
+
   call s:log("Current position " .. string(s:pos))
   call s:log("Current buffer line " .. string(getline(s:pos.lnum)))
   let s:invocation_mode = a:mode

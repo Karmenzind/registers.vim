@@ -66,4 +66,5 @@ let g:registers_debug = 1
 - support opening register window in a floating Tmux pane
 - redraw floating window when buffer/window size changed
 - verbose mode
+- center mode
 
