@@ -3,6 +3,7 @@
 " --------------------------------------------
 
 " customable configs
+let s:position             = get(g:, "registers_position", "relative")
 let s:tab_symbol           = get(g:, "registers_tab_symbol", "·")
 let s:space_symbol         = get(g:, "registers_space_symbol", " ")
 let s:return_symbol        = get(g:, "registers_return_symbol", "⏎")
@@ -13,6 +14,10 @@ let s:ctrl_r_literally     = get(g:, "registers_ctrl_r_literally", 1)
 let s:preview_key          = get(g:, "registers_preview_key","K")
 let s:preview_max_lines    = get(g:, "registers_preview_max_lines", 30)
 let s:preview_max_chars    = get(g:, "registers_preview_max_chars", 2048)
+
+if s:position !~ '\v(relative|center)'
+  echoerr "g:registers_position should be set to 'relative' or 'center'"
+endif
 
 " other configs
 let s:logfile = "/tmp/vim_registers.log"
@@ -72,11 +77,16 @@ let s:pos = {}
 
 function! s:GetScreenPos()
   let wid = win_getid()
-  let curpos = getcurpos()
-  let scrpos = screenpos(wid, curpos[1], curpos[2])
-  let is_top = scrpos.row <= (&lines / 2)
-  let is_left = scrpos.col <= (&columns / 2)
-  return [scrpos, is_top, is_left]
+  let l:curpos = getcurpos(wid)
+  let l:scrpos = screenpos(wid, l:curpos[1], l:curpos[2])
+  let istop = l:scrpos.row <= (&lines / 2)
+  let isleft = l:scrpos.col <= (&columns / 2)
+
+  call s:log(printf("Get screenpos with args (%s): %s",
+        \ [wid, l:curpos[1], l:curpos[2]],
+        \ [l:scrpos, istop, isleft]))
+
+  return [l:scrpos, istop, isleft]
 endfunction
 
 function! s:GetRegCurPos()
@@ -84,14 +94,14 @@ function! s:GetRegCurPos()
   let scrpos = screenpos(s:win, ln, 2)
   let is_top = scrpos.row <= (&lines / 2)
   let is_left = scrpos.col <= (&columns / 2)
-  
+
   let arg = [s:preview_win, ln, 2]
+
   let ret = [scrpos, is_top, is_left]
   call s:log(printf("Get reg info screenpos with args (%s): %s", arg, ret))
 
   return [scrpos, is_top, is_left]
 endfunction
-
 
 function! s:PostCursorMoved()
   let ln = line('.', s:win)
@@ -100,7 +110,6 @@ function! s:PostCursorMoved()
 
   call s:ClosePreviewWin()
 endfunction
-
 
 function! s:CurLineReg()
   let ln = line('.', s:win)
@@ -175,7 +184,6 @@ function! registers#PreviewCurLine()
             \ padding: [0, 1, 0, 1],
             \ borderchars:  ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
             \ })
-      " call setbufvar(winbufnr(s:preview_win), '&syntax', 'txt')
       call setwinvar(s:preview_win, '&wincolor', 'PopupRegisters')
     endif
   endif
@@ -289,6 +297,7 @@ function! s:ReadRegisters()
 endfunction
 
 function! registers#OpenWindow()
+  let [curpos, istop, isleft] = s:GetScreenPos()
 	let l:width = &columns
 	let l:height = &lines
   let l:win_line = winline()
@@ -335,6 +344,10 @@ function! registers#OpenWindow()
           \}
     let s:win = nvim_open_win(s:buf, v:true, l:float_opts)
   else
+    " let pos = ['bot', 'top'][istop] .. ['right', 'left'][isleft]
+    let pos = (istop? 'top': 'bot') .. (isleft? 'left': 'right')
+
+    let line = istop? 'cursor+1': 'cursor-1'
     let l:popup_opts = #{
           \ wrap:         0,
           \ mapping:      0,
@@ -351,11 +364,18 @@ function! registers#OpenWindow()
           \ borderchars:  ['-', '|', '-', '|', '╭', '╮', '╯', '╰'],
           \ time:         100000,
           \ title:        ' Registers ',
+          \ col:          'cursor',
+          \ line:         line,
+          \ pos:          pos,
           \ }
           " \ borderchars:  ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
           " \ borderchars:  ['-', '|', '-', '|', '╭', '╮', '╯', '╰'],
-    " let s:win = popup_create(s:buf, l:popup_opts)
-    let s:win = popup_atcursor(s:buf, l:popup_opts)
+
+    if s:position == 'center'
+      let l:popup_opts.pos = 'center'
+    endif
+    let s:win = popup_create(s:buf, l:popup_opts)
+    " let s:win = popup_atcursor(s:buf, l:popup_opts)
     call s:log("Popup info " .. string(popup_getoptions(s:win)))
   endif
   call s:log("Created win " .. s:win)

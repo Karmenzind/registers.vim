@@ -57,6 +57,11 @@ let g:registers_show_empty_registers = 1
 
 " Write some debug information to log file `/tmp/vim_registers.log`.
 let g:registers_debug = 1
+
+" This controls the position to show the popup
+" 'relative': close to the cursor
+" 'center': in the center of the Vim window (Vim8 only)
+let g:registers_position = "relative"
 ```
 
 ## TODO
@@ -67,4 +72,3 @@ let g:registers_debug = 1
 - redraw floating window when buffer/window size changed
 - verbose mode
 - center mode
-
