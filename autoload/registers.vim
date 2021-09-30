@@ -77,7 +77,11 @@ let s:pos = {}
 
 function! s:GetScreenPos()
   let wid = win_getid()
-  let l:curpos = getcurpos(wid)
+  if has('nvim')
+    let l:curpos = getcurpos()
+  else
+    let l:curpos = getcurpos(wid)
+  endif
   let l:scrpos = screenpos(wid, l:curpos[1], l:curpos[2])
   let istop = l:scrpos.row <= (&lines / 2)
   let isleft = l:scrpos.col <= (&columns / 2)
