@@ -9,7 +9,7 @@ let s:space_symbol         = get(g:, "registers_space_symbol", " ")
 let s:return_symbol        = get(g:, "registers_return_symbol", "⏎")
 let s:register_key_sleep   = get(g:, "registers_register_key_sleep", 0)
 let s:show_empty_registers = get(g:, "registers_show_empty_registers", 1)
-let s:debug                = get(g:, "registers_debug", 1)
+let s:debug                = get(g:, "registers_debug", 0)
 let s:ctrl_r_literally     = get(g:, "registers_ctrl_r_literally", 1)
 let s:preview_key          = get(g:, "registers_preview_key","K")
 let s:preview_max_lines    = get(g:, "registers_preview_max_lines", 30)
@@ -20,7 +20,8 @@ if s:position !~ '\v(relative|center)'
 endif
 
 " other configs
-let s:logfile = "/tmp/vim_registers.log"
+" let s:logfile = expand("/tmp/vim_registers_$USER.log")
+let s:logfile = "/tmp/vim_registers_" .. $USER .. strftime("_%y%m%d_%H%M") .. ".log"
 let s:preview_key = 'K'
 let s:register_map = {
       \ "selection":           ["*", "+"],
