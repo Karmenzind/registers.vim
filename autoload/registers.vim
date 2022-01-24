@@ -21,7 +21,6 @@ endif
 
 " other configs
 " let s:logfile = expand("/tmp/vim_registers_$USER.log")
-let s:logfile = "/tmp/vim_registers_" .. $USER .. strftime("_%y%m%d_%H%M") .. ".log"
 let s:logfile = "/tmp/vim_registers_" .. $USER .. strftime("_%y%m%d") .. ".log"
 let s:preview_key = 'K'
 let s:register_map = {
