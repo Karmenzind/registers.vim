@@ -1,4 +1,6 @@
-" Maintainer:  kmz <valesail7@gmail.com>
+"    au TerminalWinOpen * let b:_twk = &l:twk == '' ? '<c-w>' : &l:twk
+      \ | exe printf('tno <buffer><nowait> %s<c-w> %s<c-w>', b:_twk , b:_twk)
+      \ | unlet! b:_twk Maintainer:  kmz <valesail7@gmail.com>
 
 if !has('nvim')
   " FIXME (k): <2021-08-02>
@@ -29,6 +31,17 @@ command! -nargs=? -complete=custom,s:arg_opts Registers call registers#Invoke(<f
 " XXX (k): <2021-08-24> C-O? Why?
 " inoremap <silent> <C-R> <C-O><cmd>Registers i<CR>
 inoremap <silent> <C-R> <cmd>Registers i<CR>
+
+" Terminal Mode
+if has('nvim')
+  echo ""
+else
+  let s:_twk = &twk == '' ? '<c-w>' : &twk
+  exe printf('tno <silent> %s" <cmd>Registers n<CR>', s:_twk)
+endif
+
+" TODO
+" cnoremap <silent> <C-R> <cmd>Registers c<CR>
 
 " " Open the popup window when pressing " in regular mode
 nnoremap <silent> " <cmd>Registers n<CR>
