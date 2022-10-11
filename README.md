@@ -1,6 +1,6 @@
 # registers.vim
 
-**CURRENT STATUS: in development**
+**CURRENT STATUS: stable**
 
 Enhanced viewable registers powered by floating window, for both Vim8 and NeoVim. With this plugin you should be no longer troubled by tens of confusing registers in Vim.
 
@@ -8,19 +8,11 @@ This plugin was inspired by [registers.nvim](https://github.com/tversteeg/regist
 
 ## Install
 
-Vim 8.2+ or NeoVim 0.4.4+ is required.
+Vim 8.2+ is required.
 
 - use [vim-plug](https://github.com/junegunn/vim-plug):
     ```vim
     Plug 'karmenzind/registers.vim'
-    ```
-- use Packer
-    ```vim
-    use 'karmenzind/registers.vim'
-    ```
-- use Paq
-    ```vim
-    paq 'karmenzind/registers.vim'
     ```
 - use Dein
     ```vim
@@ -63,6 +55,10 @@ let g:registers_debug = 1
 " 'center': in the center of the Vim window (Vim8 only)
 let g:registers_position = "relative"
 ```
+
+## Known Error
+
+- register popups didn't work with macros
 
 ## TODO
 

@@ -22,6 +22,7 @@ endif
 " other configs
 " let s:logfile = expand("/tmp/vim_registers_$USER.log")
 let s:logfile = "/tmp/vim_registers_" .. $USER .. strftime("_%y%m%d_%H%M") .. ".log"
+let s:logfile = "/tmp/vim_registers_" .. $USER .. strftime("_%y%m%d") .. ".log"
 let s:preview_key = 'K'
 let s:register_map = {
       \ "selection":           ["*", "+"],
@@ -609,6 +610,16 @@ endfunction
 
 
 function! registers#Invoke(mode)
+  " if reg_executing() != ''
+  "   call s:log("Executing macro: " .. a:mode)
+  "   if a:mode == 'i'
+  "     call feedkeys('', "n")
+  "   else
+  "     call feedkeys('"', "n")
+  "   endif
+  "   return
+  " endif
+
   " [0, lnum, col, off, curswant]
   let curpos = getcurpos()
   let s:pos['lnum'] = curpos[1]
