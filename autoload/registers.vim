@@ -60,6 +60,8 @@ let s:ne_regs = []
 let s:buf_lines = []
 
 " win/buf
+let s:from_win = v:null
+let s:from_buf = v:null
 let s:buf = v:null
 let s:win = v:null
 let s:preview_win = v:null
@@ -73,8 +75,54 @@ let s:mappings = {}
 let s:pos = {}
 
 " --------------------------------------------
+" Init
+" --------------------------------------------
+
+
+let s:virtual_text_support = has('patch-9.0.0067')
+if s:virtual_text_support
+  if empty(prop_type_get('RegistersPreInsertVT'))
+    call prop_type_add('RegistersPreInsertVT', {'highlight': 'RegistersPreInsertVT'})
+  endif
+endif
+hi default RegistersPreInsertVT        ctermfg=12 guifg=#504945
+let s:prop_id = 0
+
+" --------------------------------------------
 " funcs
 " --------------------------------------------
+
+
+function! registers#insertShowVT(ne_regs_idx) abort
+  if !s:virtual_text_support
+    return
+  endif
+  call s:log("vt prop id " .. s:prop_id)
+  call s:log("showing register line: " .. a:ne_regs_idx)
+  let text = s:buf_lines[a:ne_regs_idx]
+  call s:log("showint vt: " .. text)
+  let p = #{
+        \ type: 'RegistersPreInsertVT',
+        \ text: text,
+        \ bufnr: s:from_buf,
+        \ }
+  let s:prop_id = prop_add(s:pos.lnum, s:pos.col, p)
+endfunction
+
+
+function! registers#clearVirtualText(line) abort
+  if s:virtual_text_support && s:prop_id != 0
+    " TODO (k): <2022-12-09> with lnr
+    let p = {"id": s:prop_id, "bufnr": s:from_buf}
+    if a:line != 0
+      call prop_remove(p, a:line)
+    else
+      call prop_remove(p)
+    endif
+    let s:prop_id = 0
+  endif
+endfunction
+
 
 function! registers#PreviewWinFilter(winid, key)
   " echom 'preview ' .. a:key
@@ -232,7 +280,10 @@ function! s:log(msg)
 endfunction
 
 
-function! registers#CursorMovement(where)
+function! registers#CursorMovement(where) abort
+  call registers#clearVirtualText(s:pos.lnum)
+  " call win_execute(s:from_win, 'call registers#clearVirtualText("' .. s:pos.lnum .. '")')
+
   let endline = line('$')
   if type(a:where) == type(0)
     let curline = a:where
@@ -262,9 +313,18 @@ function! registers#CursorMovement(where)
 	elseif curline > endline
 		let curline = endline
 	endif
+  if curline < endline
+    " call win_gotoid(s:from_win)
+    call registers#insertShowVT(curline-1)
+    " call win_gotoid(s:win)
+    call s:log("show vt with register no: " .. curline)
+    " call win_execute(s:from_win, 'call registers#insertShowVT("' .. curline-1 .. '")')
+    " call win_execute(s:win, )
+  endif
 	noautocmd exec ":" . curline
 	noautocmd exec "normal! 0"
   call s:log("Moved to " .. curline)
+
 endfunc
 
 
@@ -330,6 +390,11 @@ function! registers#OpenWindow()
 	let s:max_width = l:win_width
 
   call s:ReadRegisters()
+
+  if s:invocation_mode == "i" && s:virtual_text_support
+    call registers#clearVirtualText(s:pos.lnum)
+    call registers#insertShowVT(s:buf_lines[0])
+  endif
 
   let s:buf = bufadd("")
   silent call bufload(s:buf)
@@ -407,6 +472,10 @@ function! registers#CloseWindow()
 
   call popup_close(s:win)
   let s:win = v:null
+  let s:from_win = v:null
+  let s:from_buf = v:null
+  let s:buf_lines = []
+  call registers#clearVirtualText(s:pos.lnum)
 endfunction
 
 
@@ -555,13 +624,15 @@ endfunction
 function! registers#UpdateView()
   call popup_settext(s:win, s:buf_lines)
 
-  let s:buf_lines = []
+  " let s:buf_lines = []
 
   call setbufvar(s:buf, "&modifiable", 0)
 endfunction
 
 
 function! registers#Invoke(mode)
+  let s:from_win = winnr()
+  let s:from_buf = bufnr()
   " if reg_executing() != ''
   "   call s:log("Executing macro: " .. a:mode)
   "   if a:mode == 'i'
