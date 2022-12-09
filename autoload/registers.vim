@@ -182,25 +182,23 @@ function! registers#PreviewCurLine()
     let floatrow = regpos.row > 1? regpos.row - 1: regpos.row
     let floatcol = regpos.col + 2
 
-    " TODO (k): <2021-08-19> title
     " preview window
-    " let s:preview_win = popup_notification(c, #{
     let preview_opts = #{
-          \ title: header,
-          \ scrollbar: 0,
-          \ hidden: 0,
-          \ moved: 'any',
-          \ close: 'none',
-          \ line: floatrow + 1,
-          \ border: [1,1,1,1],
-          \ col: floatcol,
-          \ highlight: 'WarningMsg',
-          \ zindex: 300,
-          \ padding: [0, 1, 0, 1],
+          \ title:       header,
+          \ scrollbar:   0,
+          \ hidden:      0,
+          \ moved:       'any',
+          \ close:       'none',
+          \ line:        floatrow + 1,
+          \ col:         floatcol,
+          \ highlight:   'Pmenu',
+          \ zindex:      300,
+          \ padding:     [0, 1, 0, 1],
           \ borderchars: ['-', '|', '-', '|', '┌', '┐', '┘', '└'],
           \ }
+          " \ border:      [1,1,1,1],
     let s:preview_win = popup_create(c, preview_opts)
-    call setwinvar(s:preview_win, '&wincolor', 'PopupRegisters')
+    " call setwinvar(s:preview_win, '&wincolor', 'PopupRegisters')
     call popup_setoptions(s:preview_win, {
           \ 'filtermode': 'nvi',
           \ 'filter': 'registers#PreviewWinFilter',
@@ -296,13 +294,12 @@ endfunction
 
 function! s:ReadRegisters()
   let s:e_regs = []
+  let s:ne_regs = []
   let s:buf_lines = []
 
   for reg_type in s:register_sequence
     for reg in s:register_map[reg_type]
       let l:raw = getreg(reg, 1)
-
-      let l:idx = 0
       if len(l:raw) > 0
         " XXX: cut the long string
         let l:line = reg .. ": " .. s:EscapeContents(l:raw)
@@ -317,7 +314,7 @@ function! s:ReadRegisters()
   endfor
 
   if len(s:e_regs) > 0
-    let l:line = "Empty" .. join(s:e_regs, " ")
+    let l:line = "Empty: " .. join(s:e_regs, " ")
     call add(s:buf_lines, l:line)
   endif
 
@@ -565,15 +562,6 @@ endfunction
 
 
 function! registers#Invoke(mode)
-  " if a:mode == 'i'
-  "   call feedkeys('', "n")
-  "   call s:log("Feeding C-R")
-  " else
-  "   call feedkeys('"', "n")
-  "   call s:log("Feeding \"")
-  " endif
-  " return
-
   " if reg_executing() != ''
   "   call s:log("Executing macro: " .. a:mode)
   "   if a:mode == 'i'
@@ -584,17 +572,13 @@ function! registers#Invoke(mode)
   "   return
   " endif
 
-  " if a:mode == 'v'
-  "   call feedkeys('')
-  " endif
-
   " [0, lnum, col, off, curswant]
   let curpos = getcurpos()
-  let s:pos['lnum'] = curpos[1]
-  let s:pos['col'] = curpos[2]
-  let s:pos['off'] = curpos[3]
-  let s:pos['curswant'] = curpos[4]
-  let s:pos['indent'] = indent(s:pos['lnum'])
+  let s:pos.lnum     = curpos[1]
+  let s:pos.col      = curpos[2]
+  let s:pos.off      = curpos[3]
+  let s:pos.curswant = curpos[4]
+  let s:pos.indent   = indent(s:pos['lnum'])
 
   " if s:curpos[2] > 0 && len(getline(s:curpos)) == 0
   " endif
@@ -607,7 +591,7 @@ function! registers#Invoke(mode)
 
   if a:mode == "i"
     let s:cursor_is_last = col(".") == col("$") - 1
-    call s:log("cursor is last " .. string(s:cursor_is_last))
+    " call s:log("cursor is last " .. string(s:cursor_is_last))
   endif
 
   call registers#CloseWindow()
