@@ -61,3 +61,4 @@ let g:registers_debug = 0
 ## Known Bugs
 
 - register popups didn't work with macros
+- previewing `=` register shows empty
