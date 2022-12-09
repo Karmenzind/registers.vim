@@ -9,8 +9,12 @@ Inspired by [registers.nvim](https://github.com/tversteeg/registers.nvim).
 - Press `"` (normal/visual mode) or `ctrl-r` (insert mode) to trigger.
 - Press `ctrl-j/k/f/b/u/d` to move. Preview current register with `K`.
 
-![](https://raw.githubusercontent.com/Karmenzind/i/master/registers.vim/registers-preview.gif)
 
+
+<img src="https://raw.githubusercontent.com/Karmenzind/i/master/registers.vim/registers-preview.gif" alt="drawing" style="width:666px;"/>
+
+
+<!-- ![](https://raw.githubusercontent.com/Karmenzind/i/master/registers.vim/registers-preview.gif) -->
 ## Install
 
 Vim 8.2+ (with feature `+popupwin`) is required.
