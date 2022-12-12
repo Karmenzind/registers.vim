@@ -79,13 +79,13 @@ let s:pos = {}
 " --------------------------------------------
 
 
+hi default RegistersPreInsertVT        ctermfg=12 guifg=#504945
 let s:virtual_text_support = has('patch-9.0.0067')
 if s:virtual_text_support
   if empty(prop_type_get('RegistersPreInsertVT'))
     call prop_type_add('RegistersPreInsertVT', {'highlight': 'RegistersPreInsertVT'})
   endif
 endif
-hi default RegistersPreInsertVT        ctermfg=12 guifg=#504945
 let s:prop_id = 0
 
 " --------------------------------------------
@@ -471,11 +471,12 @@ function! registers#CloseWindow()
   endif
 
   call popup_close(s:win)
+  call registers#clearVirtualText(s:pos.lnum)
+
+  let s:buf_lines = []
   let s:win = v:null
   let s:from_win = v:null
   let s:from_buf = v:null
-  let s:buf_lines = []
-  call registers#clearVirtualText(s:pos.lnum)
 endfunction
 
 
