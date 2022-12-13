@@ -2,6 +2,9 @@
 " vars
 " --------------------------------------------
 
+hi PopupRegisters ctermbg=NONE guibg=NONE
+hi default RegistersPreInsertVT ctermfg=12 guifg=#504945
+
 " customable configs
 let s:position             = get(g:, "registers_position", "relative")
 let s:tab_symbol           = get(g:, "registers_tab_symbol", "·")
@@ -14,6 +17,7 @@ let s:ctrl_r_literally     = get(g:, "registers_ctrl_r_literally", 1)
 let s:preview_key          = get(g:, "registers_preview_key", "K")
 let s:preview_max_lines    = get(g:, "registers_preview_max_lines", 30)
 let s:preview_max_chars    = get(g:, "registers_preview_max_chars", 2048)
+let s:insert_virtual_text  = get(g:, "registers_insert_virtual_text", 0)
 
 if s:position !~ '\v(relative|center)'
   echoerr "g:registers_position should be set to 'relative' or 'center'"
@@ -54,33 +58,38 @@ let s:movement_keymaps = {
       \ "G":           'BOTTOM',
       \ }
 
-let s:e_regs = []
-" also actual lines
-let s:ne_regs = []
-let s:buf_lines = []
-
 " win/buf
-let s:from_win = v:null
-let s:from_buf = v:null
-let s:buf = v:null
-let s:win = v:null
-let s:preview_win = v:null
-let s:preview_buf = v:null
+function! s:resetVars() abort
+  let s:e_regs = []
+  " also actual lines
+  let s:ne_regs = []
+  let s:buf_lines = []
 
-let s:invocation_mode = v:null
-let s:operator_count = 0
-let s:mappings = {}
+  let s:from_line = v:null
+  let s:from_win = v:null
+  let s:from_buf = v:null
+  let s:buf = v:null
+  let s:win = v:null
+  let s:preview_win = v:null
+  let s:preview_buf = v:null
+  let s:is_at_last = v:null
 
-" keys: lnum, col, off, curswant, indent
-let s:pos = {}
+  let s:invocation_mode = v:null
+  let s:operator_count = 0
+  let s:mappings = {}
+
+  " keys: lnum, col, off, curswant, indent
+  let s:pos = {}
+endfunction
+
+call s:resetVars()
 
 " --------------------------------------------
 " Init
 " --------------------------------------------
 
-
-hi default RegistersPreInsertVT        ctermfg=12 guifg=#504945
-let s:virtual_text_support = has('patch-9.0.0067')
+let s:virtual_text_support = s:insert_virtual_text && has('patch-9.0.0067')
+" FIXME bugs ...
 if s:virtual_text_support
   if empty(prop_type_get('RegistersPreInsertVT'))
     call prop_type_add('RegistersPreInsertVT', {'highlight': 'RegistersPreInsertVT'})
@@ -89,24 +98,56 @@ endif
 let s:prop_id = 0
 
 " --------------------------------------------
+" utils
+" --------------------------------------------
+
+function! s:log(msg)
+  if s:debug == 1
+    if type(a:msg) != v:t_string && type(a:msg) != v:t_number
+      let l:msg = string(a:msg)
+    else
+      let l:msg = a:msg
+    endif
+
+	  if exists("*strftime")
+      let l:msg = strftime("%y-%m-%d %T") .. " " .. l:msg
+    endif
+    call writefile([l:msg], s:logfile, "a")
+  endif
+endfunction
+
+" --------------------------------------------
 " funcs
 " --------------------------------------------
 
 
 function! registers#insertShowVT(ne_regs_idx) abort
+  if s:from_buf == v:null
+    call s:log("[warn] from_buf is null")
+    return
+  endif
   if !s:virtual_text_support
     return
   endif
+  " FIXME (k): <2022-12-13> 
+  if s:is_at_last && len(s:from_line) > 0
+    return
+  endif
+  
   call s:log("vt prop id " .. s:prop_id)
   call s:log("showing register line: " .. a:ne_regs_idx)
   let text = s:buf_lines[a:ne_regs_idx]
-  call s:log("showint vt: " .. text)
+  " call s:log(printf("from line: %s len: %s", s:from_line, len(s:from_line)))
   let p = #{
         \ type: 'RegistersPreInsertVT',
         \ text: text,
         \ bufnr: s:from_buf,
         \ }
-  let s:prop_id = prop_add(s:pos.lnum, s:pos.col, p)
+
+  let vt_line = s:pos.lnum
+  let vt_col = s:pos.col
+  call s:log(printf("Show vt at line %s col %s (at last: %s)", vt_line, vt_col, s:is_at_last))
+  let s:prop_id = prop_add(vt_line, vt_col, p)
 endfunction
 
 
@@ -146,7 +187,7 @@ function! registers#PreviewWinFilter(winid, key)
 endfunction
 
 
-function! s:GetScreenPos()
+function! s:GetScreenPos() abort
   let wid = win_getid()
   let l:curpos = getcurpos(wid)
   let l:scrpos = screenpos(wid, l:curpos[1], l:curpos[2])
@@ -196,7 +237,7 @@ function! s:CurLineReg()
 endfunction
 
 
-function! registers#PreviewCurLine()
+function! registers#PreviewCurLine() abort
   let ln = line('.', s:win)
   if ln == line('$', s:win) && len(s:e_regs) > 0
     echo "Empty register."
@@ -255,7 +296,7 @@ function! registers#PreviewCurLine()
 endfunction
 
 
-function! s:ClosePreviewWin()
+function! s:ClosePreviewWin() abort
   if s:preview_win is v:null
     return
   endif
@@ -264,25 +305,10 @@ function! s:ClosePreviewWin()
 endfunction
 
 
-function! s:log(msg)
-  if s:debug == 1
-    if type(a:msg) != v:t_string && type(a:msg) != v:t_number
-      let l:msg = string(a:msg)
-    else
-      let l:msg = a:msg
-    endif
-
-	  if exists("*strftime")
-      let l:msg = strftime("%y-%m-%d %T") .. " " .. l:msg
-    endif
-    call writefile([l:msg], s:logfile, "a")
-  endif
-endfunction
-
-
 function! registers#CursorMovement(where) abort
-  call registers#clearVirtualText(s:pos.lnum)
-  " call win_execute(s:from_win, 'call registers#clearVirtualText("' .. s:pos.lnum .. '")')
+  if s:invocation_mode == 'i'
+    call registers#clearVirtualText(s:pos.lnum)
+  endif
 
   let endline = line('$')
   if type(a:where) == type(0)
@@ -313,18 +339,12 @@ function! registers#CursorMovement(where) abort
 	elseif curline > endline
 		let curline = endline
 	endif
-  if curline < endline
-    " call win_gotoid(s:from_win)
+  if s:invocation_mode == 'i' && curline < endline
     call registers#insertShowVT(curline-1)
-    " call win_gotoid(s:win)
-    call s:log("show vt with register no: " .. curline)
-    " call win_execute(s:from_win, 'call registers#insertShowVT("' .. curline-1 .. '")')
-    " call win_execute(s:win, )
+    " call s:log("show vt with register no: " .. curline)
   endif
 	noautocmd exec ":" . curline
 	noautocmd exec "normal! 0"
-  call s:log("Moved to " .. curline)
-
 endfunc
 
 
@@ -352,7 +372,7 @@ function! s:EscapeContents(raw)
 endfunction
 
 
-function! s:ReadRegisters()
+function! s:ReadRegisters() abort
   let s:e_regs = []
   let s:ne_regs = []
   let s:buf_lines = []
@@ -381,7 +401,7 @@ function! s:ReadRegisters()
 endfunction
 
 
-function! registers#OpenWindow()
+function! registers#OpenWindow() abort
   let [curpos, istop, isleft] = s:GetScreenPos()
 	let l:width = &columns
 	let l:height = &lines
@@ -393,12 +413,12 @@ function! registers#OpenWindow()
 
   if s:invocation_mode == "i" && s:virtual_text_support
     call registers#clearVirtualText(s:pos.lnum)
-    call registers#insertShowVT(s:buf_lines[0])
+    call registers#insertShowVT(0)
   endif
 
   let s:buf = bufadd("")
   silent call bufload(s:buf)
-  call s:log("Opened register in buffer " .. s:buf)
+  " call s:log("Opened register in buffer " .. s:buf)
 
   call setbufvar(s:buf, "&bufhidden", "wipe")
   call setbufvar(s:buf, "&filetype", "registers")
@@ -453,13 +473,11 @@ function! registers#OpenWindow()
   let s:win = popup_create(s:buf, l:popup_opts)
   " let s:win = popup_atcursor(s:buf, l:popup_opts)
   call s:log("Popup info " .. string(popup_getoptions(s:win)))
-  call s:log("Created win " .. s:win)
+  " call s:log("Created win " .. s:win)
 
   call setbufvar(s:buf, "&number", 0)
   call setbufvar(s:buf, "&cursorline", 1)
   call setbufvar(s:buf, "&relativenumber", 0)
-
-  hi PopupRegisters ctermbg=NONE guibg=NONE
   call setwinvar(s:win, '&wincolor', 'PopupRegisters')
 endfunction
 
@@ -473,10 +491,6 @@ function! registers#CloseWindow()
   call popup_close(s:win)
   call registers#clearVirtualText(s:pos.lnum)
 
-  let s:buf_lines = []
-  let s:win = v:null
-  let s:from_win = v:null
-  let s:from_buf = v:null
 endfunction
 
 
@@ -508,7 +522,7 @@ function! registers#SetMappings()
   function! RegisterPopupFilter(winid, key)
     call s:ClosePreviewWin()
     let l:a = (type(a:key) == v:t_number)? nr2char(a:key) : a:key
-    " call s:log(printf("Typed key '%s' Escaped '%s'", a:key, l:a))
+    call s:log(printf("Typed key '%s' Escaped '%s'", a:key, l:a))
     " call s:log(l:a == '<80><fd>`')
     " call s:log(l:a =~ '`$')
     " echom l:a
@@ -539,6 +553,8 @@ function! registers#SetMappings()
         \ 'filtermode': 'nvi',
         \ 'filter': 'RegisterPopupFilter',
         \})
+
+  call s:log("Setting mappings finished")
 
 endfunction
 
@@ -594,6 +610,7 @@ function! registers#ApplyRegister(reg)
 
   call registers#CloseWindow()
 
+  call s:log("Mode "..s:invocation_mode)
   if s:invocation_mode == "i"
     if s:ctrl_r_literally == 1
       call feedkeys("" .. l:reg, "n")
@@ -622,18 +639,18 @@ function! registers#ApplyRegister(reg)
 endfunction
 
 
-function! registers#UpdateView()
+function! registers#UpdateView() abort
   call popup_settext(s:win, s:buf_lines)
-
   " let s:buf_lines = []
-
   call setbufvar(s:buf, "&modifiable", 0)
+  call s:log("updating view finished")
 endfunction
 
 
 function! registers#Invoke(mode)
-  let s:from_win = winnr()
-  let s:from_buf = bufnr()
+  call s:log("------- start --------")
+
+  call registers#CloseWindow()
   " if reg_executing() != ''
   "   call s:log("Executing macro: " .. a:mode)
   "   if a:mode == 'i'
@@ -644,30 +661,27 @@ function! registers#Invoke(mode)
   "   return
   " endif
 
+  let s:from_line = getline('.')
+  let s:from_win = winnr()
+  let s:from_buf = bufnr()
+
   " [0, lnum, col, off, curswant]
   let curpos = getcurpos()
+
   let s:pos.lnum     = curpos[1]
   let s:pos.col      = curpos[2]
   let s:pos.off      = curpos[3]
   let s:pos.curswant = curpos[4]
   let s:pos.indent   = indent(s:pos['lnum'])
 
-  " if s:curpos[2] > 0 && len(getline(s:curpos)) == 0
-  " endif
+  " XXX (k): <2022-12-13> at $ / $-1
+  let s:is_at_last = col(".") >= col("$") - 1
 
-  call s:log("Current position " .. string(s:pos))
-  call s:log("Current buffer line " .. string(getline(s:pos.lnum)))
+  call s:log(printf("[invoke] Current pos %s Col$: %s virtcol: %s", s:pos, col('$'), virtcol('.')))
   let s:invocation_mode = a:mode
-
   let s:operator_count = get(v:, "count")
 
-  if a:mode == "i"
-    let s:cursor_is_last = col(".") == col("$") - 1
-    " call s:log("cursor is last " .. string(s:cursor_is_last))
-  endif
-
-  call registers#CloseWindow()
   call registers#OpenWindow()
-  call registers#SetMappings()
   call registers#UpdateView()
+  call registers#SetMappings()
 endfunction

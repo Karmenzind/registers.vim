@@ -26,9 +26,7 @@ endfunction
 command! -nargs=? -complete=custom,s:arg_opts Registers call registers#Invoke(<f-args>)
 
 inoremap <silent> <C-R> <C-O>:call registers#Invoke('i')<CR>
-" " Open the popup window when pressing " in regular mode
 nnoremap <silent> " :call registers#Invoke('n')<CR>
-" " Open the popup window when pressing " in visual mode
 xnoremap <silent> " :call registers#Invoke('v')<CR>
 
 " Restore after
