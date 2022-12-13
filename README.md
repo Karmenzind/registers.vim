@@ -56,9 +56,13 @@ let g:registers_ctrl_r_literally = 1
 
 " Write some debug information to log file `/tmp/vim_registers.log`.
 let g:registers_debug = 0
+
+" (experimental) show virtual text in insert mode
+let g:registers_insert_virtual_text = 0
 ```
 
 ## Known Bugs
 
 - register popups didn't work with macros
 - previewing `=` register shows empty
+- virtual text didn't work at end of line or before the last char

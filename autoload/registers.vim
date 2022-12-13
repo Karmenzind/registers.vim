@@ -17,6 +17,7 @@ let s:ctrl_r_literally     = get(g:, "registers_ctrl_r_literally", 1)
 let s:preview_key          = get(g:, "registers_preview_key", "K")
 let s:preview_max_lines    = get(g:, "registers_preview_max_lines", 30)
 let s:preview_max_chars    = get(g:, "registers_preview_max_chars", 2048)
+let s:insert_virtual_text  = get(g:, "registers_insert_virtual_text", 0)
 
 if s:position !~ '\v(relative|center)'
   echoerr "g:registers_position should be set to 'relative' or 'center'"
@@ -71,7 +72,7 @@ function! s:resetVars() abort
   let s:win = v:null
   let s:preview_win = v:null
   let s:preview_buf = v:null
-  let s:after_last_char = v:null
+  let s:is_at_last = v:null
 
   let s:invocation_mode = v:null
   let s:operator_count = 0
@@ -87,9 +88,8 @@ call s:resetVars()
 " Init
 " --------------------------------------------
 
-let s:virtual_text_support = has('patch-9.0.0067')
+let s:virtual_text_support = s:insert_virtual_text && has('patch-9.0.0067')
 " FIXME bugs ...
-let s:virtual_text_support = v:false
 if s:virtual_text_support
   if empty(prop_type_get('RegistersPreInsertVT'))
     call prop_type_add('RegistersPreInsertVT', {'highlight': 'RegistersPreInsertVT'})
@@ -129,6 +129,11 @@ function! registers#insertShowVT(ne_regs_idx) abort
   if !s:virtual_text_support
     return
   endif
+  " FIXME (k): <2022-12-13> 
+  if s:is_at_last && len(s:from_line) > 0
+    return
+  endif
+  
   call s:log("vt prop id " .. s:prop_id)
   call s:log("showing register line: " .. a:ne_regs_idx)
   let text = s:buf_lines[a:ne_regs_idx]
@@ -138,20 +143,10 @@ function! registers#insertShowVT(ne_regs_idx) abort
         \ text: text,
         \ bufnr: s:from_buf,
         \ }
-  " if len(s:from_line) > 0
-  "   let vt_col = s:pos.col+1
-  " else
-  "   let vt_col = s:pos.col
-  " endif
-  " call s:log("showint vt: " .. text)
-  let vt_col = s:pos.col
+
   let vt_line = s:pos.lnum
-  if s:after_last_char
-    let vt_col = s:pos.col + 1
-  else
-    let vt_col = s:pos.col
-  endif
-  call s:log(printf("Show vt at line %s col %s (at last: %s)", vt_line, vt_col, s:after_last_char))
+  let vt_col = s:pos.col
+  call s:log(printf("Show vt at line %s col %s (at last: %s)", vt_line, vt_col, s:is_at_last))
   let s:prop_id = prop_add(vt_line, vt_col, p)
 endfunction
 
@@ -672,35 +667,17 @@ function! registers#Invoke(mode)
 
   " [0, lnum, col, off, curswant]
   let curpos = getcurpos()
-  " if a:mode == "i"
-  "   let curpos = s:pos_before_insert
-  " else
-  " endif
+
   let s:pos.lnum     = curpos[1]
   let s:pos.col      = curpos[2]
   let s:pos.off      = curpos[3]
   let s:pos.curswant = curpos[4]
   let s:pos.indent   = indent(s:pos['lnum'])
-  
-  " if s:pos.col > 1 && 
-  "   " get the [real] position
-  " endif
 
-  " if a:mode == "i"
-  "   if s:pos.col > 1 && col(".") == col("$")
-  "     " call feedkeys("")
-  "     stopinsert
-  "     sleep 1
-  "     call s:log("[invoke][temp normal] " .. col("."))
-  "     " startinsert
-  "     call feedkeys("a")
-  "   endif
-  "   call s:log("cursor is last " .. string(s:after_last_char))
-  " endif
+  " XXX (k): <2022-12-13> at $ / $-1
+  let s:is_at_last = col(".") >= col("$") - 1
 
-  call s:log("[invoke] Current pos " .. string(s:pos) .. ' Col$: ' .. col('$'))
-  call s:log("[invoke] virtcol: " .. virtcol("."))
-  " call s:log("Current buffer line " .. string(getline(s:pos.lnum)))
+  call s:log(printf("[invoke] Current pos %s Col$: %s virtcol: %s", s:pos, col('$'), virtcol('.')))
   let s:invocation_mode = a:mode
   let s:operator_count = get(v:, "count")
 
